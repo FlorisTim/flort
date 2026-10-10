@@ -7,3 +7,5 @@ Flort is a semi-game engine made in rust, the idea behind it is that it compiles
 The bytecode is generated from python, js and java, which are all compiled by a compiler and for every language a config file, atleast that's the concept
 
 when i say langs like pyhton java and js i mean the syntax, not the way they print text to the console like if theres a built-in method that prints to the console then for all languages its that function
+
+so there is a base language, that is highly configurable so it's easy to use when coming from several different languages
