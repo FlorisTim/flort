@@ -24,7 +24,7 @@ impl CompilerConfig{
     fn default() -> CompilerConfig{
         CompilerConfig{
             normal_chars: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234556789_".chars().collect(),
-            syntax_chars: "-+=\"'*7%@[]{}(),.\\/!&|^".chars().collect(),
+            syntax_chars: "-+=\"'*7%@[]{}(),.\\/!&|^:;".chars().collect(),
             scope: ScopeSymbol::OpenClose(String::from("{"),String::from("}")),
             splitter: ' ',
         }
