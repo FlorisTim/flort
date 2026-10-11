@@ -1,4 +1,4 @@
-this is my first rust project ever so this is more a challenge to get familiar with the language
+`this is my first rust project ever so this is more a challenge to get familiar with the language
 
 # Flort engine (*Flor*is *T*immermans)
 
@@ -8,4 +8,4 @@ The bytecode is generated from python, js and java, which are all compiled by a 
 
 when i say langs like pyhton java and js i mean the syntax, not the way they print text to the console like if theres a built-in method that prints to the console then for all languages its that function
 
-so there is a base language, that is highly configurable so it's easy to use when coming from several different languages
+so there is a base language, that is highly configurable so it's easy to use when coming from several different languages`
