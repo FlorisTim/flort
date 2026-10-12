@@ -62,7 +62,7 @@ fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
                 tokens.push(parse_token(&current_string));
                 current_string = String::new();
             }
-            if c == config.splitter && current_string.len() > 1{
+            if c == config.splitter && !current_string.is_empty(){
                 tokens.push(parse_token(&current_string));
                 current_string = String::new();
                 continue;
