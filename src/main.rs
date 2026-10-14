@@ -1,13 +1,17 @@
-mod compiler;
+mod lexer;
+mod parser;
+mod common;
+
 use macroquad::prelude::*;
-use crate::compiler::CompilerConfig;
+use crate::common::CompilerConfig;
 
 #[macroquad::main("Sketch")]
 async fn main() {
-    let a = compiler::get_tokens("func test(){hello;}", &CompilerConfig::default());
+    let a = lexer::get_tokens("if (a == b){cool();}", &CompilerConfig::default());
     for token in a {
         dbg!(token.typ);
         dbg!(token.text);
+        dbg!(token.read);
         println!("-----")
     }
     loop {
