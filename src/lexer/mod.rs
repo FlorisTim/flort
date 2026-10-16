@@ -202,7 +202,10 @@ pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 read_mode = rm_symbol;
             }
-            if config.always_singular.contains(&c) || config.illegal_combinations.contains(&test_string){
+            if config.illegal_combinations.contains(&test_string){
+                emit(&mut tokens, &mut current_string, &read_mode, config);
+            }
+            if config.always_singular.contains(&c){
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 let mut temp = c.to_string();
 
