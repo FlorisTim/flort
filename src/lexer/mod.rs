@@ -187,6 +187,7 @@ pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
                 continue;
             }
         } else {
+            let test_string = current_string.to_owned() + c.to_string().as_str();
             if c == config.splitter || c == '\r' || c == '\n'{
                 if read_mode == ReadMode::Normal
                 { emit(&mut tokens, &mut current_string, &read_mode, config); }
@@ -194,14 +195,14 @@ pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
             }
             let rm_symbol = reading_mode_of(c, &current_string , config);
             if rm_symbol == ReadMode::String{
-                let test_string = current_string.to_owned() + c.to_string().as_str();
+
                 string_type = config.string_starters.iter().position(|s| s == test_string.as_str()).unwrap();
             }
             if rm_symbol != read_mode{
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 read_mode = rm_symbol;
             }
-            if config.always_singular.contains(&c){
+            if config.always_singular.contains(&c) || config.illegal_combinations.contains(&test_string){
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 let mut temp = c.to_string();
 
@@ -251,14 +252,22 @@ fn list_types(tokens: &Vec<Token>) -> Vec<String>{
 fn list_variables_defs(tokens: &Vec<Token>, custom_types: &Vec<String>, config: &CompilerConfig, defs: bool) -> Vec<String>{
     let mut out: Vec<String> = Vec::new();
     for i in 0..tokens.len() {
-        let current = tokens.get(i).unwrap();
+        let possible = tokens.get(i);
+        if possible.is_none(){
+            continue;
+        }
+        let current = possible.unwrap();
         if TokenType::Unknown == current.typ {
+            if i == 0{
+                continue;
+            }
             let pre = tokens.get(i-1);
             let suf = tokens.get(i+1);
             if pre.is_some() && suf.is_some(){
                 let suf_:&Token = suf.unwrap();
                 let pre_:&Token = pre.unwrap();
-                if let TokenType::Keyword(Keyword::ArgumentStart) = suf_.typ{
+                if TokenType::Keyword(Keyword::ArgumentStart) == suf_.typ ||
+                    TokenType::Keyword(Keyword::TypeArgumentStart) == suf_.typ{
                     if !defs{
                         continue;
                     }
@@ -267,10 +276,8 @@ fn list_variables_defs(tokens: &Vec<Token>, custom_types: &Vec<String>, config: 
                         continue;
                     }
                 }
-                for typ in config.types.iter(){
-                    if let TokenType::Type(typ) = &pre_.typ{
-                        out.push(current.text.clone());
-                    }
+                if let TokenType::Type(typ) = &pre_.typ{
+                    out.push(current.text.clone());
                 }
                 if custom_types.contains(&pre_.text){
                     out.push(current.text.clone());
@@ -301,6 +308,13 @@ pub fn resolve_ambiguous(tokens: Vec<Token>, config: &CompilerConfig) -> Vec<Tok
             if function_decl.contains(&token.text){
                 token.typ = TokenType::FuncIdentifier;
             }
+            let last = out.last();
+            if last.is_some()
+            {
+                if let TokenType::Keyword(Keyword::TypeArgumentEnd) = last.unwrap().typ {
+                    token.typ = TokenType::Identifier;
+                }
+            }
         }
 
         if let TokenType::Ambiguous(a,b) = &token.typ{
@@ -310,7 +324,8 @@ pub fn resolve_ambiguous(tokens: Vec<Token>, config: &CompilerConfig) -> Vec<Tok
                 let a_ = a.as_ref();
                 let b_ = b.as_ref();
 
-                if let TokenType::Operand = last_.typ{
+                if TokenType::Operand == last_.typ ||
+                    TokenType::Identifier == last_.typ{
                     token.typ = a_.clone();
                 } else {
                     if let TokenType::Multiple(vec) = b_{

@@ -81,6 +81,7 @@ pub enum Keyword{
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum Type{
     Void,
+    Boolean,
     Byte,
     Short,
     Char,
@@ -152,7 +153,8 @@ pub struct CompilerConfig{
     pub number_systems: HashMap<String, NumberSystem>,
     pub ambiguous: HashMap<TokenType, TokenType>,
     pub string_starters: Vec<String>,
-    pub string_enders: Vec<String>
+    pub string_enders: Vec<String>,
+    pub illegal_combinations: Vec<String>,
 }
 
 impl CompilerConfig{
@@ -205,7 +207,6 @@ impl CompilerConfig{
             boolean_operations: HashMap::from([
                 ("&&".to_string(),BooleanOperation::And),
                 ("||".to_string(),BooleanOperation::Or),
-                ("!".to_string(),BooleanOperation::Not),
             ]),
             comparisons: HashMap::from([
                 (">".to_string(),Comparison::GreaterThan),
@@ -233,6 +234,7 @@ impl CompilerConfig{
                 ("long".to_string(),Type::Long),
                 ("float".to_string(),Type::Float),
                 ("double".to_string(),Type::Double),
+                ("boolean".to_string(),Type::Boolean),
                 ("string".to_string(),Type::String),
                 ("function".to_string(),Type::Function),
                 ("let".to_string(),Type::Variable),
@@ -245,6 +247,10 @@ impl CompilerConfig{
             ]),
             string_starters: vec!["\"".to_string(),"'".to_string()],
             string_enders: vec!["\"".to_string(),"'".to_string()],
+            illegal_combinations: vec![
+                "=-".to_string(),
+                "=+".to_string(),
+            ]
         }
     }
 }
