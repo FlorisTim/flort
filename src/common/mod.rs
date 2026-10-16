@@ -59,6 +59,8 @@ pub enum Keyword{
     Else,
     ElseIf,
     While,
+    New,
+    Return,
     For,
     Class,
     Enum,
@@ -69,6 +71,8 @@ pub enum Keyword{
     TypeArgumentEnd,
     ArgumentStart,
     ArgumentEnd,
+    ArrayStart,
+    ArrayEnd,
     EndStatement,
     FieldAccess,
     ArgumentSeperator,
@@ -207,6 +211,7 @@ impl CompilerConfig{
             boolean_operations: HashMap::from([
                 ("&&".to_string(),BooleanOperation::And),
                 ("||".to_string(),BooleanOperation::Or),
+                ("!".to_string(),BooleanOperation::Not),
             ]),
             comparisons: HashMap::from([
                 (">".to_string(),Comparison::GreaterThan),
@@ -224,6 +229,8 @@ impl CompilerConfig{
                 ("class".to_string(),Keyword::Class),
                 ("enum".to_string(),Keyword::Enum),
                 ("interface".to_string(),Keyword::Interface),
+                ("new".to_string(),Keyword::New),
+                ("return".to_string(),Keyword::Return),
             ]),
             types: HashMap::from([
                 ("void".to_string(),Type::Void),
@@ -235,7 +242,7 @@ impl CompilerConfig{
                 ("float".to_string(),Type::Float),
                 ("double".to_string(),Type::Double),
                 ("boolean".to_string(),Type::Boolean),
-                ("string".to_string(),Type::String),
+                ("String".to_string(),Type::String),
                 ("function".to_string(),Type::Function),
                 ("let".to_string(),Type::Variable),
                 ("const".to_string(),Type::Constant),
@@ -250,6 +257,9 @@ impl CompilerConfig{
             illegal_combinations: vec![
                 "=-".to_string(),
                 "=+".to_string(),
+                "&&!".to_string(),
+                "||!".to_string(),
+                "=\"".to_string(),
             ]
         }
     }

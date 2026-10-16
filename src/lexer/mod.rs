@@ -40,6 +40,9 @@ fn naive_syntax_token_type(token: &String,last_token: Option<&Token>, config: &C
     if token.eq(&config.arguments[0]) { return TokenType::Keyword(Keyword::ArgumentStart); }
     if token.eq(&config.arguments[1]) { return TokenType::Keyword(Keyword::ArgumentEnd); }
 
+    if token.eq(&config.array_arguments[0]) { return TokenType::Keyword(Keyword::ArrayStart); }
+    if token.eq(&config.array_arguments[1]) { return TokenType::Keyword(Keyword::ArrayEnd); }
+
     let potential_op = config.operations.get(token);
     let potential_co = config.comparisons.get(token);
     let potential_boop = config.boolean_operations.get(token);
@@ -187,24 +190,25 @@ pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
                 continue;
             }
         } else {
-            let test_string = current_string.to_owned() + c.to_string().as_str();
+            let mut test_string = current_string.to_owned() + c.to_string().as_str();
             if c == config.splitter || c == '\r' || c == '\n'{
                 if read_mode == ReadMode::Normal
                 { emit(&mut tokens, &mut current_string, &read_mode, config); }
                 continue;
             }
+            if config.illegal_combinations.contains(&test_string){
+                emit(&mut tokens, &mut current_string, &read_mode, config);
+                test_string = c.to_string();
+            }
             let rm_symbol = reading_mode_of(c, &current_string , config);
             if rm_symbol == ReadMode::String{
-
                 string_type = config.string_starters.iter().position(|s| s == test_string.as_str()).unwrap();
             }
             if rm_symbol != read_mode{
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 read_mode = rm_symbol;
             }
-            if config.illegal_combinations.contains(&test_string){
-                emit(&mut tokens, &mut current_string, &read_mode, config);
-            }
+
             if config.always_singular.contains(&c){
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 let mut temp = c.to_string();
@@ -226,17 +230,6 @@ pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
 
 fn simple_token(token_type: TokenType) -> Token{
     Token{typ: token_type, text: String::new(), read: ReadMode::Normal}
-}
-
-fn give_all_unknowns(mut tokens: Vec<Token>, text: &String, new_type: TokenType) -> Vec<Token>{
-    for token in &mut tokens {
-        if let TokenType::Unknown = token.typ {
-            if &token.text == text{
-                token.typ = new_type.clone();
-            }
-        }
-    }
-    tokens
 }
 fn list_types(tokens: &Vec<Token>) -> Vec<String>{
     let mut out: Vec<String> = Vec::new();
@@ -279,6 +272,9 @@ fn list_variables_defs(tokens: &Vec<Token>, custom_types: &Vec<String>, config: 
                         continue;
                     }
                 }
+                if let TokenType::Keyword(Keyword::ArrayEnd) = &pre_.typ{
+                    out.push(current.text.clone());
+                }
                 if let TokenType::Type(typ) = &pre_.typ{
                     out.push(current.text.clone());
                 }
@@ -315,6 +311,9 @@ pub fn resolve_ambiguous(tokens: Vec<Token>, config: &CompilerConfig) -> Vec<Tok
             if last.is_some()
             {
                 if let TokenType::Keyword(Keyword::TypeArgumentEnd) = last.unwrap().typ {
+                    token.typ = TokenType::Identifier;
+                }
+                if let TokenType::Keyword(Keyword::ArrayEnd) = last.unwrap().typ {
                     token.typ = TokenType::Identifier;
                 }
             }
