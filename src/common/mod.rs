@@ -6,18 +6,30 @@ pub enum NumberSystem {
     Hexadecimal,
     Octal,
     Binary,
-    NotANumber,
+    NotANumber
 }
-#[derive(Clone, PartialEq, Debug)]
+
+pub enum FunctionDecl{
+    Keyword(String),
+    Type,
+}
+#[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum Comparison {
     Equals,
     NotEquals,
     GreaterThan,
     LessThan,
     GreaterThanOrEqual,
-    LessThanOrEqual,
+    LessThanOrEqual
 }
-#[derive(Clone, PartialEq, Debug)]
+
+#[derive(Clone, PartialEq, Debug, Hash, Eq)]
+pub enum Constant{
+    True,
+    False,
+    Null
+}
+#[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum Operation{
     Add,
     Subtract,
@@ -31,30 +43,42 @@ pub enum Operation{
     BitAnd,
     BitOr,
     BitLeftShift,
-    BitRightShift,
+    BitRightShift
 }
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash, Eq)]
+pub enum BooleanOperation{
+    And,
+    Or,
+    Xor,
+    Not,
+    Nand
+}
+#[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum Keyword{
     If,
     Else,
     ElseIf,
     While,
     For,
-    Variable,
-    Constant,
-    Function,
     Class,
     Enum,
     Interface,
     ScopeEnter,
     ScopeExit,
+    TypeArgumentStart,
+    TypeArgumentEnd,
     ArgumentStart,
     ArgumentEnd,
     EndStatement,
     FieldAccess,
+    ArgumentSeperator,
+    TypeSpecifier,
     Assignment,
+    OperationAssignment(Operation),
+    BooleanOperationAssignment(BooleanOperation),
+
 }
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum Type{
     Void,
     Byte,
@@ -65,16 +89,27 @@ pub enum Type{
     Float,
     Double,
     String,
+    Function,
+    Variable,
+    Constant,
 }
-#[derive(Clone, PartialEq, Debug)]
+
+#[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum TokenType{
     Unknown,
     Comparison(Comparison),
     Operation(Operation),
     Keyword(Keyword),
     Type(Type),
+    BooleanOperation(BooleanOperation),
+    Constant(Constant),
     Identifier,
+    TypeIdentifier,
+    FuncIdentifier,
     Operand,
+    RawString,
+    Ambiguous(Box<TokenType>,Box<TokenType>),
+    Multiple(Vec<TokenType>),
 }
 #[derive(PartialEq, Clone, Debug)]
 pub enum ReadMode{
@@ -95,21 +130,29 @@ pub struct CompilerConfig{
     pub normal_chars: Vec<char>,
     pub syntax_chars: Vec<char>,
     pub number_chars: Vec<char>,
+    pub extended_number_chars: Vec<char>,
     pub always_singular: Vec<char>,
     pub scope: ScopeSymbol,
     pub arguments: [String; 2],
     pub type_arguments: [String; 2],
     pub array_arguments: [String; 2],
     pub field_access: char,
+    pub type_specifier: char,
+    pub arg_seperator: char,
     pub assignment: char,
     pub end_statement: char,
     pub splitter: char,
+    pub constants: HashMap<String, Constant>,
     pub operations: HashMap<String, Operation>,
+    pub boolean_operations: HashMap<String, BooleanOperation>,
     pub comparisons: HashMap<String, Comparison>,
     pub keywords: HashMap<String, Keyword>,
     pub types: HashMap<String, Type>,
     pub number_suffixes: HashMap<String, Type>,
     pub number_systems: HashMap<String, NumberSystem>,
+    pub ambiguous: HashMap<TokenType, TokenType>,
+    pub string_starters: Vec<String>,
+    pub string_enders: Vec<String>
 }
 
 impl CompilerConfig{
@@ -127,10 +170,13 @@ impl CompilerConfig{
                 ("0b".to_string(),NumberSystem::Binary),
             ]),
             normal_chars: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".chars().collect(),
-            always_singular: "#()[]{}~?".chars().collect(),
+            always_singular: "#()[]{}~?,;:\r\n".chars().collect(),
             syntax_chars: "!@#$%^&*{}()[]<>.,/\\\"':;`~?=+-".chars().collect(),
-            number_chars: "0123456789.".chars().collect(),
+            number_chars: "0123456789_.".chars().collect(),
+            extended_number_chars: "abcdefABCDEF".chars().collect(),
             field_access: '.',
+            type_specifier: ':',
+            arg_seperator: ',',
             assignment: '=',
             scope: ScopeSymbol::OpenClose("{".to_string(),"}".to_string()),
             arguments: ["(".to_string(),")".to_string()],
@@ -138,6 +184,11 @@ impl CompilerConfig{
             array_arguments: ["[".to_string(),"]".to_string()],
             end_statement: ';',
             splitter: ' ',
+            constants: HashMap::from([
+                ("true".to_string(),Constant::True),
+                ("false".to_string(),Constant::False),
+                ("null".to_string(),Constant::Null),
+            ]),
             operations: HashMap::from([
                 ("+".to_string(),Operation::Add),
                 ("-".to_string(),Operation::Subtract),
@@ -150,6 +201,11 @@ impl CompilerConfig{
                 ("&".to_string(),Operation::BitAnd),
                 ("<<".to_string(),Operation::BitLeftShift),
                 (">>".to_string(),Operation::BitRightShift),
+            ]),
+            boolean_operations: HashMap::from([
+                ("&&".to_string(),BooleanOperation::And),
+                ("||".to_string(),BooleanOperation::Or),
+                ("!".to_string(),BooleanOperation::Not),
             ]),
             comparisons: HashMap::from([
                 (">".to_string(),Comparison::GreaterThan),
@@ -164,9 +220,6 @@ impl CompilerConfig{
                 ("else".to_string(),Keyword::Else),
                 ("while".to_string(),Keyword::While),
                 ("for".to_string(),Keyword::For),
-                ("let".to_string(),Keyword::Variable),
-                ("const".to_string(),Keyword::Constant),
-                ("func".to_string(),Keyword::Function),
                 ("class".to_string(),Keyword::Class),
                 ("enum".to_string(),Keyword::Enum),
                 ("interface".to_string(),Keyword::Interface),
@@ -181,7 +234,17 @@ impl CompilerConfig{
                 ("float".to_string(),Type::Float),
                 ("double".to_string(),Type::Double),
                 ("string".to_string(),Type::String),
+                ("function".to_string(),Type::Function),
+                ("let".to_string(),Type::Variable),
+                ("const".to_string(),Type::Constant),
             ]),
+            ambiguous: HashMap::from([
+                (TokenType::Comparison(Comparison::LessThan),TokenType::Keyword(Keyword::TypeArgumentStart)),
+                (TokenType::Comparison(Comparison::GreaterThan),TokenType::Keyword(Keyword::TypeArgumentEnd)),
+                (TokenType::Operation(Operation::BitRightShift),TokenType::Multiple(vec![TokenType::Keyword(Keyword::TypeArgumentEnd),TokenType::Keyword(Keyword::TypeArgumentEnd)])),
+            ]),
+            string_starters: vec!["\"".to_string(),"'".to_string()],
+            string_enders: vec!["\"".to_string(),"'".to_string()],
         }
     }
 }

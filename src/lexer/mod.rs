@@ -1,64 +1,83 @@
-use std::cmp::{min, PartialEq};
+use std::cmp::{PartialEq};
+use std::ffi::c_int;
+use macroquad::input::KeyCode::P;
 use crate::common::*;
 
-mod parser {}
-
-fn syntax_token_type(token: &String, config: &CompilerConfig) -> TokenType {
-    if &config.field_access.to_string() == token{
-        return TokenType::Keyword(Keyword::FieldAccess);
+fn syntax_token_type(token: &String, last_token: Option<&Token>, config: &CompilerConfig) -> TokenType{
+    let out = naive_syntax_token_type(token, last_token, config);
+    let potential = config.ambiguous.get(&out);
+    if potential.is_some() && !(last_token.unwrap().typ == TokenType::Operand) {
+        TokenType::Ambiguous(Box::new(out.clone()),Box::new(potential.unwrap().clone()))
+    } else {
+        out
     }
+}
 
-    if &config.assignment.to_string() == token{
-        return TokenType::Keyword(Keyword::Assignment);
+fn naive_syntax_token_type(token: &String,last_token: Option<&Token>, config: &CompilerConfig) -> TokenType {
+    let last_char = token.chars().last();
+    if last_char.is_some() && last_char.unwrap() == config.assignment {
+        let test_string = token[0..token.len()-1].to_string();
+        let test_type = naive_syntax_token_type(&test_string, last_token, config);
+        if let TokenType::Operation(a) = test_type{
+            return TokenType::Keyword(Keyword::OperationAssignment(a));
+        }
+        if let TokenType::BooleanOperation(a) = test_type{
+            return TokenType::Keyword(Keyword::BooleanOperationAssignment(a));
+        }
+        if let TokenType::BooleanOperation(a) = test_type{
+            return TokenType::Keyword(Keyword::BooleanOperationAssignment(a));
+        }
     }
-
+    if &config.field_access.to_string() == token { return TokenType::Keyword(Keyword::FieldAccess); }
+    if &config.type_specifier.to_string() == token { return TokenType::Keyword(Keyword::TypeSpecifier); }
+    if &config.arg_seperator.to_string() == token { return TokenType::Keyword(Keyword::ArgumentSeperator); }
+    if &config.assignment.to_string() == token { return TokenType::Keyword(Keyword::Assignment); }
     if let ScopeSymbol::OpenClose(a, b) = &config.scope {
-        if (token == a) {
-            return TokenType::Keyword(Keyword::ScopeEnter);
-        }
-        if (token == b) {
-            return TokenType::Keyword(Keyword::ScopeExit);
-        }
+        if token == a { return TokenType::Keyword(Keyword::ScopeEnter); }
+        if token == b { return TokenType::Keyword(Keyword::ScopeExit); }
     }
-
-    if (token.eq(&config.end_statement.to_string())) {
-        return TokenType::Keyword(Keyword::EndStatement);
-    }
-    if(token.eq(&config.arguments[0])) {
-        return TokenType::Keyword(Keyword::ArgumentStart);
-    }
-    if (token.eq(&config.arguments[1])) {
-        return TokenType::Keyword(Keyword::ArgumentEnd);
-    }
+    if token.eq(&config.end_statement.to_string()) { return TokenType::Keyword(Keyword::EndStatement); }
+    if token.eq(&config.arguments[0]) { return TokenType::Keyword(Keyword::ArgumentStart); }
+    if token.eq(&config.arguments[1]) { return TokenType::Keyword(Keyword::ArgumentEnd); }
 
     let potential_op = config.operations.get(token);
     let potential_co = config.comparisons.get(token);
+    let potential_boop = config.boolean_operations.get(token);
     if potential_op.is_some() {
         TokenType::Operation(potential_op.unwrap().clone())
     } else if potential_co.is_some() {
         TokenType::Comparison(potential_co.unwrap().clone())
+    } else if potential_boop.is_some() {
+        TokenType::BooleanOperation(potential_boop.unwrap().clone())
     } else { TokenType::Unknown }
 }
 fn normal_token_type(token: &String, config: &CompilerConfig) -> TokenType{
     let potential_kw = config.keywords.get(token);
     let potential_ty = config.types.get(token);
+    let potential_boop = config.boolean_operations.get(token);
+    let potential_co = config.constants.get(token);
+
     if potential_kw.is_some(){
         TokenType::Keyword(potential_kw.unwrap().clone())
     } else if potential_ty.is_some(){
         TokenType::Type(potential_ty.unwrap().clone())
     } else if is_number(token, config){
         TokenType::Operand
+    } else if potential_boop.is_some() {
+        TokenType::BooleanOperation(potential_boop.unwrap().clone())
+    } else if potential_co.is_some() {
+        TokenType::Constant(potential_co.unwrap().clone())
     } else {
         TokenType::Unknown
     }
 }
 
-fn token_type(current_string: &String,read_mode: &ReadMode, config: &CompilerConfig) -> TokenType{
-    if let ReadMode::Syntax = read_mode{syntax_token_type(&current_string, config)} else {normal_token_type(&current_string, config)}
+fn token_type(current_string: &String,read_mode: &ReadMode,last_token: Option<&Token>, config: &CompilerConfig) -> TokenType{
+    if let ReadMode::Syntax = read_mode{syntax_token_type(&current_string, last_token, config)} else {normal_token_type(&current_string, config)}
 }
 fn any_suffix(string: &String, values: Vec<&String>) -> Option<String>{
     for s in values{
-        if (string.ends_with(s)){
+        if string.ends_with(s) {
             return Some(s.to_string());
         }
     }
@@ -67,7 +86,7 @@ fn any_suffix(string: &String, values: Vec<&String>) -> Option<String>{
 
 fn any_prefix(string: &String, values: Vec<&String>) ->  Option<String>{
     for s in values{
-        if (string.starts_with(s)){
+        if string.starts_with(s) {
             return Some(s.to_string());
         }
     }
@@ -86,22 +105,38 @@ fn is_number(token: &String, config: &CompilerConfig) -> bool {
 
     let minimum = suffix.len() + prefix.len();
 
-    if (token.len() <= minimum) {
+    let mut selected_chars = config.number_chars.clone();
+
+    if prefix != "" {
+        for c in &config.extended_number_chars{
+            selected_chars.push(*c);
+        }
+    }
+
+    let single_char = *config.number_chars.last().unwrap();
+
+    if token.len() <= minimum {
         return false;
     }
 
     let new_token = String::from(&token[prefix.len()..token.len()-suffix.len()]);
 
+    let mut single_char_used = false;
     let mut out = true;
     for c in new_token.chars() {
-        out &= config.number_chars.contains(&c);
+        if single_char_used && c == single_char {out = false};
+        single_char_used |= c == single_char;
+        out &= selected_chars.contains(&c);
     }
-    println!("{} is {}", token, out);
     out
 }
 fn reading_mode_of(character: char, current_string: &String, config: &CompilerConfig) -> ReadMode{
-    let number_test = current_string.to_owned() + character.to_string().as_str();
-    if is_number(&number_test, config){
+
+    let test = current_string.to_owned() + character.to_string().as_str();
+    if config.string_starters.contains(&test){
+        return ReadMode::String;
+    }
+    if is_number(&test, config){
         return ReadMode::Normal;
     }
     if config.syntax_chars.contains(&character){ReadMode::Syntax} else {ReadMode::Normal}
@@ -115,20 +150,24 @@ fn parse_token(token: &String, read_mode: &ReadMode, last_token: Option<&Token>,
         read: read_mode.to_owned(),
     };
 
-    if (read_mode == &ReadMode::Normal){
+    if read_mode == &ReadMode::Normal{
         out.typ = normal_token_type(token, config);
     }
-    if (read_mode == &ReadMode::Syntax){
-        out.typ = syntax_token_type(token, config);
+    if read_mode == &ReadMode::Syntax{
+        out.typ = syntax_token_type(token, last_token, config);
     }
 
     out
 }
 fn emit(tokens: &mut Vec<Token>, current_string: &mut String, read_mode: &ReadMode, config: &CompilerConfig){
-    if (current_string.is_empty()){
+    if current_string.is_empty(){
         return;
     }
-    tokens.push(parse_token(&current_string, &read_mode, tokens.last(), config));
+    let mut possible = parse_token(&current_string, &read_mode, tokens.last(), config);
+    if read_mode == &ReadMode::String && possible.typ == TokenType::Unknown{
+        possible.typ = TokenType::RawString;
+    }
+    tokens.push(possible);
     current_string.clear();
 }
 pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
@@ -136,29 +175,33 @@ pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
     let mut current_string: String = String::new();
     let mut read_mode: ReadMode = ReadMode::Normal;
     let mut last_char: char = config.end_statement;
+    let mut string_type :usize = 0;
     for c in code.chars(){
 
         if let ReadMode::String = &read_mode{
-            //...
-        } else {
-
-            if (c == config.splitter){
-                emit(&mut tokens, &mut current_string, &read_mode, config);
+            let mut test_string = current_string.to_owned() + c.to_string().as_str();
+            if test_string.ends_with(config.string_enders.get(string_type).unwrap()){
+                emit(&mut tokens, &mut test_string, &read_mode, config);
+                read_mode = ReadMode::Normal;
+                current_string.clear();
                 continue;
             }
-            let rm_symbol = reading_mode_of(c,&current_string , config);
-            println!("{} is of readmode {:?}", c, rm_symbol);
+        } else {
+            if c == config.splitter || c == '\r' || c == '\n'{
+                if read_mode == ReadMode::Normal
+                { emit(&mut tokens, &mut current_string, &read_mode, config); }
+                continue;
+            }
+            let rm_symbol = reading_mode_of(c, &current_string , config);
+            if rm_symbol == ReadMode::String{
+                let test_string = current_string.to_owned() + c.to_string().as_str();
+                string_type = config.string_starters.iter().position(|s| s == test_string.as_str()).unwrap();
+            }
             if rm_symbol != read_mode{
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 read_mode = rm_symbol;
             }
-            // if let ReadMode::Syntax = read_mode {
-            //     let potential: TokenType = token_type(&current_string, &read_mode, config);
-            //     if TokenType::Unknown != potential {
-            //         emit(&mut tokens, &mut current_string, &read_mode, config);
-            //     }
-            // }
-            if (config.always_singular.contains(&c)){
+            if config.always_singular.contains(&c){
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 let mut temp = c.to_string();
 
@@ -170,8 +213,120 @@ pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
         last_char = c;
         current_string.push(c);
     }
-    let rm_symbol = reading_mode_of(last_char,&current_string , config);
+    let rm_symbol = if read_mode != ReadMode::String {reading_mode_of(last_char,&current_string , config)} else {read_mode};
     emit(&mut tokens, &mut current_string, &rm_symbol, config);
 
     tokens
+}
+
+
+fn simple_token(token_type: TokenType) -> Token{
+    Token{typ: token_type, text: String::new(), read: ReadMode::Normal}
+}
+
+fn give_all_unknowns(mut tokens: Vec<Token>, text: &String, new_type: TokenType) -> Vec<Token>{
+    for token in &mut tokens {
+        if let TokenType::Unknown = token.typ {
+            if &token.text == text{
+                token.typ = new_type.clone();
+            }
+        }
+    }
+    tokens
+}
+fn list_types(tokens: &Vec<Token>) -> Vec<String>{
+    let mut out: Vec<String> = Vec::new();
+    let mut last: &TokenType = &TokenType::Unknown;
+    for token in tokens {
+        if TokenType::Unknown == token.typ {
+            if let TokenType::Keyword(Keyword::Class) = last{
+                out.push(token.text.clone());
+            }
+        }
+        last = &token.typ;
+    }
+    out
+}
+
+fn list_variables_defs(tokens: &Vec<Token>, custom_types: &Vec<String>, config: &CompilerConfig, defs: bool) -> Vec<String>{
+    let mut out: Vec<String> = Vec::new();
+    for i in 0..tokens.len() {
+        let current = tokens.get(i).unwrap();
+        if TokenType::Unknown == current.typ {
+            let pre = tokens.get(i-1);
+            let suf = tokens.get(i+1);
+            if pre.is_some() && suf.is_some(){
+                let suf_:&Token = suf.unwrap();
+                let pre_:&Token = pre.unwrap();
+                if let TokenType::Keyword(Keyword::ArgumentStart) = suf_.typ{
+                    if !defs{
+                        continue;
+                    }
+                } else{
+                    if defs{
+                        continue;
+                    }
+                }
+                for typ in config.types.iter(){
+                    if let TokenType::Type(typ) = &pre_.typ{
+                        out.push(current.text.clone());
+                    }
+                }
+                if custom_types.contains(&pre_.text){
+                    out.push(current.text.clone());
+                    continue;
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn resolve_ambiguous(tokens: Vec<Token>, config: &CompilerConfig) -> Vec<Token>{
+    let types = list_types(&tokens);
+    let variables = list_variables_defs(&tokens, &types, config, false);
+    let function_decl = list_variables_defs(&tokens, &types, config, true);
+
+    let mut out: Vec<Token> = Vec::new();
+    for mut token in tokens{
+        let last = out.last();
+
+        if let TokenType::Unknown = token.typ{
+            if types.contains(&token.text){
+                token.typ = TokenType::TypeIdentifier;
+            }
+            if variables.contains(&token.text){
+                token.typ = TokenType::Identifier;
+            }
+            if function_decl.contains(&token.text){
+                token.typ = TokenType::FuncIdentifier;
+            }
+        }
+
+        if let TokenType::Ambiguous(a,b) = &token.typ{
+            if last.is_some(){
+                let last_ = last.unwrap();
+
+                let a_ = a.as_ref();
+                let b_ = b.as_ref();
+
+                if let TokenType::Operand = last_.typ{
+                    token.typ = a_.clone();
+                } else {
+                    if let TokenType::Multiple(vec) = b_{
+                        for typ in vec{
+                            out.push(simple_token(typ.clone()));
+                        }
+                        continue;
+                    } else {
+                        token.typ = b_.clone();
+                    }
+                }
+            }
+        }
+
+        out.push(token);
+    }
+
+    out
 }
