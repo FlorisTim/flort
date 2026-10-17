@@ -94,9 +94,12 @@ pub enum Type{
     Float,
     Double,
     String,
+    Generic,
     Function,
     Variable,
     Constant,
+    Custom(String),
+    Array(Box<Type>, u8),
 }
 
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
@@ -108,15 +111,17 @@ pub enum TokenType{
     Type(Type),
     BooleanOperation(BooleanOperation),
     Constant(Constant),
-    Identifier,
+    Identifier(Type),
     TypeIdentifier,
-    FuncIdentifier,
+    FuncIdentifier(Type),
     Operand,
     RawString,
     Ambiguous(Box<TokenType>,Box<TokenType>),
     Multiple(Vec<TokenType>),
 }
-#[derive(PartialEq, Clone, Debug)]
+
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum ReadMode{
     Normal,
     Syntax,
@@ -126,6 +131,7 @@ pub enum ScopeSymbol{
     Indent,
     OpenClose(String, String)
 }
+#[derive(Clone)]
 pub struct Token{
     pub typ: TokenType,
     pub text: String,
