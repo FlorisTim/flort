@@ -211,13 +211,22 @@ pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 read_mode = rm_symbol;
             }
-
             if config.always_singular.contains(&c){
                 emit(&mut tokens, &mut current_string, &read_mode, config);
                 let mut temp = c.to_string();
 
                 emit(&mut tokens, &mut temp, &ReadMode::Syntax, config);
                 continue;
+            }
+            if c == config.field_access && tokens.last().is_some(){
+                if tokens.last().unwrap().read == ReadMode::Syntax
+                {
+                    emit(&mut tokens, &mut current_string, &read_mode, config);
+                    let mut temp = c.to_string();
+
+                    emit(&mut tokens, &mut temp, &ReadMode::Syntax, config);
+                    continue;
+                }
             }
 
         }
@@ -247,9 +256,8 @@ fn list_types(tokens: &Vec<Token>) -> Vec<String>{
     }
     out
 }
-
-fn list_variables_defs(tokens: &Vec<Token>, custom_types: &Vec<String>, config: &CompilerConfig, defs: bool) -> Vec<(String,Type,usize)>{
-    let mut out: Vec<(String,Type,usize)> = Vec::new();
+fn list_variables_defs(tokens: &Vec<Token>, custom_types: &Vec<String>, config: &CompilerConfig, defs: bool) -> Vec<String>{
+    let mut out: Vec<String> = Vec::new();
     let mut last_type: Type = Type::Void;
     let mut array_amt: u8 = 0;
     for i in 0..tokens.len() {
@@ -291,11 +299,11 @@ fn list_variables_defs(tokens: &Vec<Token>, custom_types: &Vec<String>, config: 
                 let determined_type: Type =
                     if array_amt > 0 {Type::Array(Box::new(last_type.clone()), array_amt)} else {last_type.clone()};
                 if let TokenType::Keyword(Keyword::ArrayEnd) = &pre_.typ{
-                    out.push((current.text.clone(), determined_type, i));
+                    out.push(current.text.clone());
                 } else if let TokenType::Type(typ) = &pre_.typ{
-                    out.push((current.text.clone(), determined_type, i));
+                    out.push(current.text.clone());
                 } else if custom_types.contains(&pre_.text){
-                    out.push((current.text.clone(), determined_type, i));
+                    out.push(current.text.clone());
                     continue;
                 }
             }
@@ -303,15 +311,6 @@ fn list_variables_defs(tokens: &Vec<Token>, custom_types: &Vec<String>, config: 
     }
     out
 }
-
-fn throuple_vec_contains_start<A: std::cmp::PartialEq,B,C>(vec: &Vec<(A,B,C)>, test: &A) -> bool{
-    vec.iter().any(|v| test == &v.0)
-}
-
-fn first_type_after(string: &String, before: usize, vec: &Vec<(String,Type,usize)>) -> Option<Type> {
-    vec.iter().rev().find(|v| string == &v.0 && v.2 <= before).map(|v| v.1.clone())
-}
-
 pub fn resolve_ambiguous(tokens: Vec<Token>, config: &CompilerConfig) -> Vec<Token>{
     let types = list_types(&tokens);
     let variables = list_variables_defs(&tokens, &types, config, false);
@@ -327,28 +326,24 @@ pub fn resolve_ambiguous(tokens: Vec<Token>, config: &CompilerConfig) -> Vec<Tok
         let mut token: Token = potential_token.unwrap().clone();
         let last = out.last();
 
-        if let TokenType::Unknown = token.typ{
-            if types.contains(&token.text){
+        if let TokenType::Unknown = token.typ {
+            if types.contains(&token.text) {
                 token.typ = TokenType::TypeIdentifier;
             }
-            if throuple_vec_contains_start(&variables, &token.text){
-                let test = first_type_after(&token.text, i, &variables);
-                if test.is_some() { token.typ = TokenType::Identifier(test.unwrap()); }
+            if variables.contains(&token.text) {
+                token.typ = TokenType::Identifier;
             }
-            if throuple_vec_contains_start(&function_decl, &token.text){
-                let test = first_type_after(&token.text, i, &function_decl);
-                if test.is_some() { token.typ = TokenType::FuncIdentifier(test.unwrap()); }
+            if function_decl.contains(&token.text) {
+                token.typ = TokenType::FuncIdentifier;
             }
             let last = out.last();
             if last.is_some()
             {
                 if let TokenType::Keyword(Keyword::TypeArgumentEnd) = last.unwrap().typ {
-                    let test = first_type_after(&token.text, i, &function_decl);
-                    if test.is_some() { token.typ = TokenType::Identifier(test.unwrap()); }
+                    token.typ = TokenType::Identifier;
                 }
                 if let TokenType::Keyword(Keyword::ArrayEnd) = last.unwrap().typ {
-                    let test = first_type_after(&token.text, i, &function_decl);
-                    if test.is_some() { token.typ = TokenType::Identifier(test.unwrap()); }
+                    token.typ = TokenType::Identifier;
                 }
             }
         }
@@ -362,7 +357,7 @@ pub fn resolve_ambiguous(tokens: Vec<Token>, config: &CompilerConfig) -> Vec<Tok
 
                 if TokenType::Operand == last_.typ{
                     token.typ = a_.clone();
-                } else if let TokenType::Identifier(_) = &last_.typ{
+                } else if let TokenType::Identifier = &last_.typ{
                     token.typ = a_.clone();
                 } else {
                     if let TokenType::Multiple(vec) = b_{

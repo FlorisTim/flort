@@ -111,9 +111,9 @@ pub enum TokenType{
     Type(Type),
     BooleanOperation(BooleanOperation),
     Constant(Constant),
-    Identifier(Type),
+    Identifier,
     TypeIdentifier,
-    FuncIdentifier(Type),
+    FuncIdentifier,
     Operand,
     RawString,
     Ambiguous(Box<TokenType>,Box<TokenType>),
@@ -266,6 +266,10 @@ impl CompilerConfig{
                 "&&!".to_string(),
                 "||!".to_string(),
                 "=\"".to_string(),
+                ").".to_string(),
+                "].".to_string(),
+                ">.".to_string(),
+                "\".".to_string(),
             ]
         }
     }
