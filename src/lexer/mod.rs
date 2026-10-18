@@ -4,7 +4,7 @@ use std::ffi::c_int;
 use macroquad::input::KeyCode::P;
 use crate::common::*;
 
-fn syntax_token_type(token: &String, last_token: Option<&Token>, config: &CompilerConfig) -> TokenType{
+fn syntax_token_type(token: &str, last_token: Option<&Token>, config: &CompilerConfig) -> TokenType{
     let out = naive_syntax_token_type(token, last_token, config);
     let potential = config.ambiguous.get(&out);
     if potential.is_some() && !(last_token.unwrap().typ == TokenType::Operand) {
@@ -14,7 +14,7 @@ fn syntax_token_type(token: &String, last_token: Option<&Token>, config: &Compil
     }
 }
 
-fn naive_syntax_token_type(token: &String,last_token: Option<&Token>, config: &CompilerConfig) -> TokenType {
+fn naive_syntax_token_type(token: &str,last_token: Option<&Token>, config: &CompilerConfig) -> TokenType {
     let last_char = token.chars().last();
     if last_char.is_some() && last_char.unwrap() == config.assignment {
         let test_string = token[0..token.len()-1].to_string();
@@ -55,7 +55,7 @@ fn naive_syntax_token_type(token: &String,last_token: Option<&Token>, config: &C
         TokenType::BooleanOperation(potential_boop.unwrap().clone())
     } else { TokenType::Unknown }
 }
-fn normal_token_type(token: &String, config: &CompilerConfig) -> TokenType{
+fn normal_token_type(token: &str, config: &CompilerConfig) -> TokenType{
     let potential_kw = config.keywords.get(token);
     let potential_ty = config.types.get(token);
     let potential_boop = config.boolean_operations.get(token);
@@ -76,10 +76,10 @@ fn normal_token_type(token: &String, config: &CompilerConfig) -> TokenType{
     }
 }
 
-fn token_type(current_string: &String,read_mode: &ReadMode,last_token: Option<&Token>, config: &CompilerConfig) -> TokenType{
+fn token_type(current_string: &str,read_mode: &ReadMode,last_token: Option<&Token>, config: &CompilerConfig) -> TokenType{
     if let ReadMode::Syntax = read_mode{syntax_token_type(&current_string, last_token, config)} else {normal_token_type(&current_string, config)}
 }
-fn any_suffix(string: &String, values: Vec<&String>) -> Option<String>{
+fn any_suffix(string: &str, values: Vec<&String>) -> Option<String>{
     for s in values{
         if string.ends_with(s) {
             return Some(s.to_string());
@@ -88,7 +88,7 @@ fn any_suffix(string: &String, values: Vec<&String>) -> Option<String>{
     None
 }
 
-fn any_prefix(string: &String, values: Vec<&String>) ->  Option<String>{
+fn any_prefix(string: &str, values: Vec<&String>) ->  Option<String>{
     for s in values{
         if string.starts_with(s) {
             return Some(s.to_string());
@@ -97,7 +97,7 @@ fn any_prefix(string: &String, values: Vec<&String>) ->  Option<String>{
     None
 }
 
-fn is_number(token: &String, config: &CompilerConfig) -> bool {
+fn is_number(token: &str, config: &CompilerConfig) -> bool {
     let pot_suffix = any_suffix(token, Vec::from_iter(config.number_suffixes.keys()));
     let pot_prefix = any_prefix(token, Vec::from_iter(config.number_systems.keys()));
 
@@ -134,7 +134,7 @@ fn is_number(token: &String, config: &CompilerConfig) -> bool {
     }
     out
 }
-fn reading_mode_of(character: char, current_string: &String, config: &CompilerConfig) -> ReadMode{
+fn reading_mode_of(character: char, current_string: &str, config: &CompilerConfig) -> ReadMode{
 
     let test = current_string.to_owned() + character.to_string().as_str();
     if config.string_starters.contains(&test){
@@ -147,7 +147,7 @@ fn reading_mode_of(character: char, current_string: &String, config: &CompilerCo
 }
 
 
-fn parse_token(token: &String, read_mode: &ReadMode, last_token: Option<&Token>, config: &CompilerConfig) -> Token{
+fn parse_token(token: &str, read_mode: &ReadMode, last_token: Option<&Token>, config: &CompilerConfig) -> Token{
     let mut out = Token{
         typ: TokenType::Unknown,
         text: token.to_owned(),
