@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
-#[derive(Clone)]
+
+#[derive(Clone, Copy)]
 pub enum NumberSystem {
-    Decimal,
-    Hexadecimal,
-    Octal,
-    Binary,
-    NotANumber
+    Decimal = 10,
+    Hexadecimal = 16,
+    Octal = 8,
+    Binary = 2,
+    NotANumber = 0
 }
 
 pub enum FunctionDecl{
@@ -115,7 +116,7 @@ pub enum TokenType{
     TypeIdentifier,
     FuncIdentifier,
     Operand,
-    RawString,
+    RawString(usize),
     Ambiguous(Box<TokenType>,Box<TokenType>),
     Multiple(Vec<TokenType>),
 }
@@ -153,6 +154,7 @@ pub struct CompilerConfig{
     pub assignment: char,
     pub end_statement: char,
     pub splitter: char,
+    pub number_values: HashMap<char, u8>,
     pub constants: HashMap<String, Constant>,
     pub operations: HashMap<String, Operation>,
     pub boolean_operations: HashMap<String, BooleanOperation>,
@@ -185,6 +187,30 @@ impl CompilerConfig{
             always_singular: "#()[]{}~?,;:\r\n".chars().collect(),
             syntax_chars: "!@#$%^&*{}()[]<>.,/\\\"':;`~?=+-".chars().collect(),
             number_chars: "0123456789_.".chars().collect(),
+            number_values: HashMap::from([
+                ('0', 0),
+                ('1', 1),
+                ('2', 2),
+                ('3', 3),
+                ('4', 4),
+                ('5', 5),
+                ('6', 6),
+                ('7', 7),
+                ('8', 8),
+                ('9', 9),
+                ('A', 10),
+                ('B', 11),
+                ('C', 12),
+                ('D', 13),
+                ('E', 14),
+                ('F', 15),
+                ('a', 10),
+                ('b', 11),
+                ('c', 12),
+                ('d', 13),
+                ('e', 14),
+                ('f', 15),
+            ]),
             extended_number_chars: "abcdefABCDEF".chars().collect(),
             field_access: '.',
             type_specifier: ':',

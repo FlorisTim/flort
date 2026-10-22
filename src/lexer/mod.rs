@@ -1,7 +1,4 @@
 use std::cmp::{PartialEq};
-use std::collections::HashMap;
-use std::ffi::c_int;
-use macroquad::input::KeyCode::P;
 use crate::common::*;
 
 fn syntax_token_type(token: &str, last_token: Option<&Token>, config: &CompilerConfig) -> TokenType{
@@ -79,35 +76,19 @@ fn normal_token_type(token: &str, config: &CompilerConfig) -> TokenType{
 fn token_type(current_string: &str,read_mode: &ReadMode,last_token: Option<&Token>, config: &CompilerConfig) -> TokenType{
     if let ReadMode::Syntax = read_mode{syntax_token_type(&current_string, last_token, config)} else {normal_token_type(&current_string, config)}
 }
-fn any_suffix(string: &str, values: Vec<&String>) -> Option<String>{
-    for s in values{
-        if string.ends_with(s) {
-            return Some(s.to_string());
-        }
-    }
-    None
-}
-
-fn any_prefix(string: &str, values: Vec<&String>) ->  Option<String>{
-    for s in values{
-        if string.starts_with(s) {
-            return Some(s.to_string());
-        }
-    }
-    None
-}
 
 fn is_number(token: &str, config: &CompilerConfig) -> bool {
-    let pot_suffix = any_suffix(token, Vec::from_iter(config.number_suffixes.keys()));
-    let pot_prefix = any_prefix(token, Vec::from_iter(config.number_systems.keys()));
+    let pot_suffix = config.number_suffixes.iter().find(|(a,_)| token.ends_with(*a));
+    let pot_prefix = config.number_suffixes.iter().find(|(a,_)| token.starts_with(*a));
 
-    let mut suffix: String = "".to_string();
-    let mut prefix: String = "".to_string();
+    let mut suffix: &String = &String::new();
+    let mut prefix: &String = &String::new();
 
-    if pot_prefix.is_some(){ prefix = pot_prefix.unwrap(); }
-    if pot_suffix.is_some(){ suffix = pot_suffix.unwrap(); }
+    let mut minimum = 0;
 
-    let minimum = suffix.len() + prefix.len();
+    if pot_prefix.is_some(){ prefix = pot_prefix.unwrap().0; minimum += prefix.len(); }
+    if pot_suffix.is_some(){ suffix = pot_suffix.unwrap().0; minimum += suffix.len(); }
+
 
     let mut selected_chars = config.number_chars.clone();
 
@@ -163,78 +144,78 @@ fn parse_token(token: &str, read_mode: &ReadMode, last_token: Option<&Token>, co
 
     out
 }
-fn emit(tokens: &mut Vec<Token>, current_string: &mut String, read_mode: &ReadMode, config: &CompilerConfig){
+
+
+fn emit(tokens: &mut Vec<Token>, current_string: &mut String, read_mode: &ReadMode, config: &CompilerConfig, string_type: usize){
     if current_string.is_empty(){
         return;
     }
     let mut possible = parse_token(&current_string, &read_mode, tokens.last(), config);
     if read_mode == &ReadMode::String && possible.typ == TokenType::Unknown{
-        possible.typ = TokenType::RawString;
+        possible.typ = TokenType::RawString(string_type);
     }
     tokens.push(possible);
     current_string.clear();
 }
 
 
-pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token>{
+pub fn get_tokens(code: &str, config: &CompilerConfig) -> Vec<Token> {
     let mut tokens: Vec<Token> = Vec::new();
     let mut current_string: String = String::new();
     let mut read_mode: ReadMode = ReadMode::Normal;
     let mut last_char: char = config.end_statement;
-    let mut string_type :usize = 0;
-    for c in code.chars(){
-
-        if let ReadMode::String = &read_mode{
+    let mut string_type: usize = 0;
+    for c in code.chars() {
+        if let ReadMode::String = &read_mode {
             let mut test_string = current_string.to_owned() + c.to_string().as_str();
-            if test_string.ends_with(config.string_enders.get(string_type).unwrap()){
-                emit(&mut tokens, &mut test_string, &read_mode, config);
+            if test_string.ends_with(config.string_enders.get(string_type).unwrap()) {
+                emit(&mut tokens, &mut test_string, &read_mode, config, string_type);
                 read_mode = ReadMode::Normal;
                 current_string.clear();
                 continue;
             }
         } else {
             let mut test_string = current_string.to_owned() + c.to_string().as_str();
-            if c == config.splitter || c == '\r' || c == '\n'{
+            if c == config.splitter || c == '\r' || c == '\n' {
                 if let ReadMode::Normal = read_mode
-                { emit(&mut tokens, &mut current_string, &read_mode, config); }
+                { emit(&mut tokens, &mut current_string, &read_mode, config, 0); }
                 continue;
             }
-            if config.illegal_combinations.contains(&test_string){
-                emit(&mut tokens, &mut current_string, &read_mode, config);
+            if config.illegal_combinations.contains(&test_string) {
+                emit(&mut tokens, &mut current_string, &read_mode, config, 0);
                 test_string = c.to_string();
             }
-            let rm_symbol = reading_mode_of(c, &current_string , config);
-            if let ReadMode::String = rm_symbol{
+            let rm_symbol = reading_mode_of(c, &current_string, config);
+            if let ReadMode::String = rm_symbol {
                 string_type = config.string_starters.iter().position(|s| s == test_string.as_str()).unwrap();
             }
-            if rm_symbol != read_mode{
-                emit(&mut tokens, &mut current_string, &read_mode, config);
+            if rm_symbol != read_mode {
+                emit(&mut tokens, &mut current_string, &read_mode, config, 0);
                 read_mode = rm_symbol;
             }
-            if config.always_singular.contains(&c){
-                emit(&mut tokens, &mut current_string, &read_mode, config);
+            if config.always_singular.contains(&c) {
+                emit(&mut tokens, &mut current_string, &read_mode, config, 0);
                 let mut temp = c.to_string();
 
-                emit(&mut tokens, &mut temp, &ReadMode::Syntax, config);
+                emit(&mut tokens, &mut temp, &ReadMode::Syntax, config, 0);
                 continue;
             }
-            if c == config.field_access && tokens.last().is_some(){
+            if c == config.field_access && tokens.last().is_some() {
                 if tokens.last().unwrap().read == ReadMode::Syntax
                 {
-                    emit(&mut tokens, &mut current_string, &read_mode, config);
+                    emit(&mut tokens, &mut current_string, &read_mode, config, 0);
                     let mut temp = c.to_string();
 
-                    emit(&mut tokens, &mut temp, &ReadMode::Syntax, config);
+                    emit(&mut tokens, &mut temp, &ReadMode::Syntax, config, 0);
                     continue;
                 }
             }
-
         }
         last_char = c;
         current_string.push(c);
     }
-    let rm_symbol = if read_mode != ReadMode::String {reading_mode_of(last_char,&current_string , config)} else {read_mode};
-    emit(&mut tokens, &mut current_string, &rm_symbol, config);
+    let rm_symbol = if read_mode != ReadMode::String { reading_mode_of(last_char, &current_string, config) } else { read_mode };
+    emit(&mut tokens, &mut current_string, &rm_symbol, config, 0);
 
     tokens
 }

@@ -1,0 +1,11 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\src",
+    "\\src\\common",
+    "\\src\\lexer",
+    "\\src\\parser"
+  ],
+  "SelectedNode": "\\src\\parser\\mod.rs",
+  "PreviewInSolutionExplorer": false
+}

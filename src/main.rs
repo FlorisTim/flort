@@ -1,12 +1,12 @@
 mod lexer;
 mod parser;
 mod common;
+mod vm;
 
 use std::fs;
-use std::env;
-use std::path::Path;
 use macroquad::prelude::*;
-use crate::common::CompilerConfig;
+use crate::common::{CompilerConfig, ReadMode, Token, TokenType, Type};
+use crate::parser::parse_value;
 
 #[macroquad::main("Sketch")]
 async fn main() {
@@ -18,6 +18,10 @@ async fn main() {
         dbg!(token.read);
         println!("-----")
     }
+
+    println!("float parse test");
+    println!("{:?}", parse_value(Token{text: "5f".to_string(), typ: TokenType::Operand, read: ReadMode::Normal}, &CompilerConfig::default()));
+
     loop {
         clear_background(BLACK);
 
