@@ -15,6 +15,10 @@ impl Token{
     pub fn without_read(typ: &TokenType, text: &String) -> Token{
         Token{typ: typ.clone(), text: text.clone(), read: ReadMode::Normal}
     }
+    pub fn with_type(mut self: Self, typ: TokenType) -> Token{
+        self.typ = typ;
+        self
+    }
 }
 pub enum FunctionDecl{
     Keyword(String),
