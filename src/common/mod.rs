@@ -1,15 +1,21 @@
 use std::collections::HashMap;
 
+pub type Base = i64;
 
-#[derive(Clone, Copy)]
-pub enum NumberSystem {
-    Decimal = 10,
-    Hexadecimal = 16,
-    Octal = 8,
-    Binary = 2,
-    NotANumber = 0
+impl Token{
+    pub fn new(typ: &TokenType, text: &String, read_mode: &ReadMode) -> Token{
+        Token{typ: typ.clone(), text: text.clone(), read: read_mode.clone()}
+    }
+    pub fn from_type(typ: &TokenType) -> Token{
+        Token{typ: typ.clone(), text: "".to_string(), read: ReadMode::Normal}
+    }
+    pub fn from_string(text: &String) -> Token{
+        Token{typ: TokenType::Unknown, text: text.clone(), read: ReadMode::Normal}
+    }
+    pub fn without_read(typ: &TokenType, text: &String) -> Token{
+        Token{typ: typ.clone(), text: text.clone(), read: ReadMode::Normal}
+    }
 }
-
 pub enum FunctionDecl{
     Keyword(String),
     Type,
@@ -81,6 +87,8 @@ pub enum Keyword{
     Assignment,
     OperationAssignment(Operation),
     BooleanOperationAssignment(BooleanOperation),
+    Arrow,
+    FatArrow
 
 }
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
@@ -141,14 +149,13 @@ pub struct Token{
 pub struct CompilerConfig{
     pub normal_chars: Vec<char>,
     pub syntax_chars: Vec<char>,
-    pub number_chars: Vec<char>,
-    pub extended_number_chars: Vec<char>,
     pub always_singular: Vec<char>,
     pub scope: ScopeSymbol,
     pub arguments: [String; 2],
     pub type_arguments: [String; 2],
     pub array_arguments: [String; 2],
     pub field_access: char,
+    pub decimal: char,
     pub type_specifier: char,
     pub arg_seperator: char,
     pub assignment: char,
@@ -162,7 +169,7 @@ pub struct CompilerConfig{
     pub keywords: HashMap<String, Keyword>,
     pub types: HashMap<String, Type>,
     pub number_suffixes: HashMap<String, Type>,
-    pub number_systems: HashMap<String, NumberSystem>,
+    pub number_systems: HashMap<String, Base>,
     pub ambiguous: HashMap<TokenType, TokenType>,
     pub string_starters: Vec<String>,
     pub string_enders: Vec<String>,
@@ -180,13 +187,13 @@ impl CompilerConfig{
                 ("d".to_string(),Type::Double),
             ]),
             number_systems: HashMap::from([
-                ("0x".to_string(),NumberSystem::Hexadecimal),
-                ("0b".to_string(),NumberSystem::Binary),
+                ("0x".to_string(),16),
+                ("0b".to_string(),2),
+                ("0".to_string(),8),
             ]),
             normal_chars: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".chars().collect(),
             always_singular: "#()[]{}~?,;:\r\n".chars().collect(),
             syntax_chars: "!@#$%^&*{}()[]<>.,/\\\"':;`~?=+-".chars().collect(),
-            number_chars: "0123456789_.".chars().collect(),
             number_values: HashMap::from([
                 ('0', 0),
                 ('1', 1),
@@ -211,8 +218,8 @@ impl CompilerConfig{
                 ('e', 14),
                 ('f', 15),
             ]),
-            extended_number_chars: "abcdefABCDEF".chars().collect(),
             field_access: '.',
+            decimal: '.',
             type_specifier: ':',
             arg_seperator: ',',
             assignment: '=',
@@ -263,6 +270,8 @@ impl CompilerConfig{
                 ("interface".to_string(),Keyword::Interface),
                 ("new".to_string(),Keyword::New),
                 ("return".to_string(),Keyword::Return),
+                ("->".to_string(),Keyword::Arrow),
+                ("=>".to_string(),Keyword::FatArrow),
             ]),
             types: HashMap::from([
                 ("void".to_string(),Type::Void),
@@ -295,6 +304,10 @@ impl CompilerConfig{
                 ").".to_string(),
                 "].".to_string(),
                 ">.".to_string(),
+                ">>-".to_string(),
+                "<<-".to_string(),
+                "<-".to_string(),
+                ">-".to_string(),
                 "\".".to_string(),
             ]
         }

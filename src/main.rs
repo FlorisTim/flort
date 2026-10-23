@@ -1,7 +1,6 @@
 mod lexer;
 mod parser;
 mod common;
-mod vm;
 
 use std::fs;
 use macroquad::prelude::*;

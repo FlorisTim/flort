@@ -51,7 +51,7 @@ pub fn parse_value(value: Token, config: &CompilerConfig) -> Option<Value>{
             let system_lookup = config.number_systems.iter().find(|(b,_)| value.text.starts_with(*b))?;
             let type_lookup = config.number_suffixes.iter().find(|(b,_)| value.text.ends_with(*b))?;
 
-            let system: &NumberSystem = system_lookup.1;
+            let system: Base = *system_lookup.1;
             let typ: &Type = type_lookup.1;
             parse_number(
             &value.text[
@@ -68,9 +68,9 @@ pub fn parse_value(value: Token, config: &CompilerConfig) -> Option<Value>{
     }
 }
 
-fn parse_number(input: &str, system: &NumberSystem, typ: &Type, config: &CompilerConfig) -> Option<Value>{
-    let base = *system as i64;
-    if input.contains(*config.number_chars.last()?){
+fn parse_number(input: &str, system: Base, typ: &Type, config: &CompilerConfig) -> Option<Value>{
+    let base = system;
+    if input.contains(config.decimal){
         let output = parse_float(input, base, config)?;
         return match typ {
             Type::Float => Some(Value::Float(output as f32)),
@@ -101,7 +101,7 @@ fn parse_int(input: &str, base: i64, config: &CompilerConfig) -> Option<i64>{
 }
 
 fn parse_float(input: &str, base: i64, config: &CompilerConfig) -> Option<f64>{
-    let decimal = *config.number_chars.last()?;
+    let decimal = config.decimal;
     if !input.contains(decimal){ return Some(parse_int(input, base, config)? as f64)}
     if input.chars().last()?.eq(&decimal){ return Some(parse_int(&input[0..input.len()-1], base, config)? as f64)}
     let mut total: f64 = 0.;

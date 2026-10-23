@@ -1,5 +1,1 @@
-void a(){}
-
-function a(){
-
-}
+5 +-5
