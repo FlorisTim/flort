@@ -30,7 +30,7 @@ enum Node{
 }
 
 
-pub fn parse_value(value: Token, config: &CompilerConfig) -> Option<Value>{
+pub fn parse_value(value: Token, config: &CompilerConfig) -> Option<Value> {
     match value.typ {
         TokenType::Constant(s) => Some(match s {
             Constant::False => Value::Bool(false),
@@ -43,25 +43,25 @@ pub fn parse_value(value: Token, config: &CompilerConfig) -> Option<Value>{
             if a.is_none() || b.is_none() {
                 return None;
             }
-            let out = value.text[a.unwrap().len()..value.text.len()-b.unwrap().len()].to_string();
+            let out = value.text[a.unwrap().len()..value.text.len() - b.unwrap().len()].to_string();
 
-            Some(if out.len() == 1 {Value::Char(out.chars().nth(0)?)} else {Value::String(out)})
+            Some(if out.len() == 1 { Value::Char(out.chars().nth(0)?) } else { Value::String(out) })
         },
         TokenType::Operand => {
-            let system_lookup = config.number_systems.iter().find(|(b,_)| value.text.starts_with(*b))?;
-            let type_lookup = config.number_suffixes.iter().find(|(b,_)| value.text.ends_with(*b))?;
+            let system_lookup = config.number_systems.iter().find(|(b, _)| value.text.starts_with(*b))?;
+            let type_lookup = config.number_suffixes.iter().find(|(b, _)| value.text.ends_with(*b))?;
 
             let system: Base = *system_lookup.1;
             let typ: &Type = type_lookup.1;
             parse_number(
-            &value.text[
-                system_lookup.0.len()
-                    ..
-                    value.text.len() - type_lookup.0.len()
-            ],
-            system,
-            typ,
-            config,
+                &value.text[
+                    system_lookup.0.len()
+                        ..
+                        value.text.len() - type_lookup.0.len()
+                    ],
+                system,
+                typ,
+                config,
             )
         }
         _ => None

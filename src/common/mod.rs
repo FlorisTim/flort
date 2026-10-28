@@ -1,19 +1,16 @@
 use std::collections::HashMap;
-
+use colored::Colorize;
 pub type Base = i64;
 
 impl Token{
-    pub fn new(typ: &TokenType, text: &String, read_mode: &ReadMode) -> Token{
-        Token{typ: typ.clone(), text: text.clone(), read: read_mode.clone()}
+    pub fn new(typ: &TokenType, text: &String, index: usize) -> Token{
+        Token{typ: typ.clone(), text: text.clone(), index}
     }
-    pub fn from_type(typ: &TokenType) -> Token{
-        Token{typ: typ.clone(), text: "".to_string(), read: ReadMode::Normal}
+    pub fn from_type(typ: &TokenType, index: usize) -> Token{
+        Token{typ: typ.clone(), text: "".to_string(), index}
     }
-    pub fn from_string(text: &String) -> Token{
-        Token{typ: TokenType::Unknown, text: text.clone(), read: ReadMode::Normal}
-    }
-    pub fn without_read(typ: &TokenType, text: &String) -> Token{
-        Token{typ: typ.clone(), text: text.clone(), read: ReadMode::Normal}
+    pub fn from_string(text: &String, index: usize) -> Token{
+        Token{typ: TokenType::Unknown, text: text.clone(), index}
     }
     pub fn with_type(mut self: Self, typ: TokenType) -> Token{
         self.typ = typ;
@@ -141,59 +138,50 @@ pub enum ReadMode{
     String
 }
 pub enum ScopeSymbol{
-    Indent,
-    OpenClose(String, String)
+    Indent(char),
+    OpenClose([char; 2])
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Token{
     pub typ: TokenType,
     pub text: String,
-    pub read: ReadMode,
+    pub index: usize
 }
 pub struct CompilerConfig{
     pub normal_chars: Vec<char>,
     pub syntax_chars: Vec<char>,
     pub always_singular: Vec<char>,
     pub scope: ScopeSymbol,
-    pub arguments: [String; 2],
-    pub type_arguments: [String; 2],
-    pub array_arguments: [String; 2],
-    pub field_access: char,
     pub decimal: char,
-    pub type_specifier: char,
-    pub arg_seperator: char,
-    pub assignment: char,
-    pub end_statement: char,
     pub splitter: char,
     pub number_values: HashMap<char, u8>,
-    pub constants: HashMap<String, Constant>,
-    pub operations: HashMap<String, Operation>,
-    pub boolean_operations: HashMap<String, BooleanOperation>,
-    pub comparisons: HashMap<String, Comparison>,
-    pub keywords: HashMap<String, Keyword>,
-    pub types: HashMap<String, Type>,
+    pub keywords: HashMap<String, TokenType>,
     pub number_suffixes: HashMap<String, Type>,
     pub number_systems: HashMap<String, Base>,
-    pub ambiguous: HashMap<TokenType, TokenType>,
     pub string_starters: Vec<String>,
     pub string_enders: Vec<String>,
-    pub illegal_combinations: Vec<String>,
+    pub ambiguous_debug: HashMap<String, String>
 }
 
-impl CompilerConfig{
-    pub fn default() -> CompilerConfig{
-        CompilerConfig{
+impl CompilerConfig {
+    pub fn default() -> CompilerConfig {
+        CompilerConfig {
             number_suffixes: HashMap::from([
-                ("b".to_string(),Type::Byte),
-                ("s".to_string(),Type::Short),
-                ("l".to_string(),Type::Long),
-                ("f".to_string(),Type::Float),
-                ("d".to_string(),Type::Double),
+                ("b".to_string(), Type::Byte),
+                ("s".to_string(), Type::Short),
+                ("l".to_string(), Type::Long),
+                ("f".to_string(), Type::Float),
+                ("d".to_string(), Type::Double),
+                ("B".to_string(), Type::Byte),
+                ("S".to_string(), Type::Short),
+                ("L".to_string(), Type::Long),
+                ("F".to_string(), Type::Float),
+                ("D".to_string(), Type::Double),
             ]),
             number_systems: HashMap::from([
-                ("0x".to_string(),16),
-                ("0b".to_string(),2),
-                ("0".to_string(),8),
+                ("0x".to_string(), 16),
+                ("0b".to_string(), 2),
+                ("0o".to_string(), 8),
             ]),
             normal_chars: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".chars().collect(),
             always_singular: "#()[]{}~?,;:\r\n".chars().collect(),
@@ -222,98 +210,106 @@ impl CompilerConfig{
                 ('e', 14),
                 ('f', 15),
             ]),
-            field_access: '.',
             decimal: '.',
-            type_specifier: ':',
-            arg_seperator: ',',
-            assignment: '=',
-            scope: ScopeSymbol::OpenClose("{".to_string(),"}".to_string()),
-            arguments: ["(".to_string(),")".to_string()],
-            type_arguments: ["<".to_string(),">".to_string()],
-            array_arguments: ["[".to_string(),"]".to_string()],
-            end_statement: ';',
+            scope: ScopeSymbol::OpenClose(['{','}']),
             splitter: ' ',
-            constants: HashMap::from([
-                ("true".to_string(),Constant::True),
-                ("false".to_string(),Constant::False),
-                ("null".to_string(),Constant::Null),
-            ]),
-            operations: HashMap::from([
-                ("+".to_string(),Operation::Add),
-                ("-".to_string(),Operation::Subtract),
-                ("/".to_string(),Operation::Divide),
-                ("*".to_string(),Operation::Multiply),
-                ("%".to_string(),Operation::Modulo),
-                ("**".to_string(),Operation::Power),
-                ("^".to_string(),Operation::BitXor),
-                ("|".to_string(),Operation::BitOr),
-                ("&".to_string(),Operation::BitAnd),
-                ("<<".to_string(),Operation::BitLeftShift),
-                (">>".to_string(),Operation::BitRightShift),
-            ]),
-            boolean_operations: HashMap::from([
-                ("&&".to_string(),BooleanOperation::And),
-                ("||".to_string(),BooleanOperation::Or),
-                ("!".to_string(),BooleanOperation::Not),
-            ]),
-            comparisons: HashMap::from([
-                (">".to_string(),Comparison::GreaterThan),
-                ("<".to_string(),Comparison::LessThan),
-                ("<=".to_string(),Comparison::LessThanOrEqual),
-                (">=".to_string(),Comparison::GreaterThanOrEqual),
-                ("==".to_string(),Comparison::Equals),
-                ("!=".to_string(),Comparison::NotEquals),
-            ]),
             keywords: HashMap::from([
-                ("if".to_string(),Keyword::If),
-                ("else".to_string(),Keyword::Else),
-                ("while".to_string(),Keyword::While),
-                ("for".to_string(),Keyword::For),
-                ("class".to_string(),Keyword::Class),
-                ("enum".to_string(),Keyword::Enum),
-                ("interface".to_string(),Keyword::Interface),
-                ("new".to_string(),Keyword::New),
-                ("return".to_string(),Keyword::Return),
-                ("->".to_string(),Keyword::Arrow),
-                ("=>".to_string(),Keyword::FatArrow),
+                //constants
+                ("true".to_string(), TokenType::Constant(Constant::True)),
+                ("false".to_string(), TokenType::Constant(Constant::False)),
+                ("null".to_string(), TokenType::Constant(Constant::Null)),
+                ("=".to_string(), TokenType::Keyword(Keyword::Assignment)),
+                (",".to_string(), TokenType::Keyword(Keyword::ArgumentSeperator)),
+                (".".to_string(), TokenType::Keyword(Keyword::FieldAccess)),
+                (":".to_string(), TokenType::Keyword(Keyword::TypeSpecifier)),
+                ("[".to_string(), TokenType::Keyword(Keyword::ArrayStart)),
+                ("]".to_string(), TokenType::Keyword(Keyword::ArrayEnd)),
+                ("(".to_string(), TokenType::Keyword(Keyword::ArgumentStart)),
+                (")".to_string(), TokenType::Keyword(Keyword::ArgumentEnd)),
+                (";".to_string(), TokenType::Keyword(Keyword::EndStatement)),
+                ("+=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::Add))),
+                ("-=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::Subtract))),
+                ("/=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::Divide))),
+                ("*=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::Multiply))),
+                ("%=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::Modulo))),
+                ("**=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::Power))),
+                ("^=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::BitXor))),
+                ("|=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::BitOr))),
+                ("&=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::BitAnd))),
+                ("<<=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::BitLeftShift))),
+                (">>=".to_string(), TokenType::Keyword(Keyword::OperationAssignment(Operation::BitRightShift))),
+                //bool ops and comparisons
+                ("&&=".to_string(), TokenType::Keyword(Keyword::BooleanOperationAssignment(BooleanOperation::And))),
+                ("||=".to_string(), TokenType::Keyword(Keyword::BooleanOperationAssignment(BooleanOperation::Or))),
+                //operators
+                ("+".to_string(), TokenType::Operation(Operation::Add)),
+                ("-".to_string(), TokenType::Operation(Operation::Subtract)),
+                ("/".to_string(), TokenType::Operation(Operation::Divide)),
+                ("*".to_string(), TokenType::Operation(Operation::Multiply)),
+                ("%".to_string(), TokenType::Operation(Operation::Modulo)),
+                ("**".to_string(), TokenType::Operation(Operation::Power)),
+                ("^".to_string(), TokenType::Operation(Operation::BitXor)),
+                ("|".to_string(), TokenType::Operation(Operation::BitOr)),
+                ("&".to_string(), TokenType::Operation(Operation::BitAnd)),
+                ("<<".to_string(), TokenType::Operation(Operation::BitLeftShift)),
+                (">>".to_string(), TokenType::Ambiguous(
+                    Box::from(TokenType::Operation(Operation::BitRightShift)),
+                    Box::from(TokenType::Multiple(vec![
+                        TokenType::Keyword(Keyword::TypeArgumentEnd),
+                        TokenType::Keyword(Keyword::TypeArgumentEnd)
+                    ])))
+                ),
+                //bool ops and comparisons
+                ("&&".to_string(), TokenType::BooleanOperation(BooleanOperation::And)),
+                ("||".to_string(), TokenType::BooleanOperation(BooleanOperation::Or)),
+                ("!".to_string(), TokenType::BooleanOperation(BooleanOperation::Not)),
+                (">".to_string(), TokenType::Ambiguous(
+                    Box::from(TokenType::Comparison(Comparison::GreaterThan)),
+                    Box::from(TokenType::Keyword(Keyword::TypeArgumentEnd)))
+                ),
+                ("<".to_string(), TokenType::Ambiguous(
+                    Box::from(TokenType::Comparison(Comparison::LessThan)),
+                    Box::from(TokenType::Keyword(Keyword::TypeArgumentStart)))
+                ),
+                ("<=".to_string(), TokenType::Comparison(Comparison::LessThanOrEqual)),
+                (">=".to_string(), TokenType::Comparison(Comparison::GreaterThanOrEqual)),
+                ("==".to_string(), TokenType::Comparison(Comparison::Equals)),
+                ("!=".to_string(), TokenType::Comparison(Comparison::NotEquals)),
+                // keywords
+                ("if".to_string(), TokenType::Keyword(Keyword::If)),
+                ("else".to_string(), TokenType::Keyword(Keyword::Else)),
+                ("while".to_string(), TokenType::Keyword(Keyword::While)),
+                ("for".to_string(), TokenType::Keyword(Keyword::For)),
+                ("class".to_string(), TokenType::Keyword(Keyword::Class)),
+                ("enum".to_string(), TokenType::Keyword(Keyword::Enum)),
+                ("interface".to_string(), TokenType::Keyword(Keyword::Interface)),
+                ("new".to_string(), TokenType::Keyword(Keyword::New)),
+                ("return".to_string(), TokenType::Keyword(Keyword::Return)),
+                ("->".to_string(), TokenType::Keyword(Keyword::Arrow)),
+                ("=>".to_string(), TokenType::Keyword(Keyword::FatArrow)),
+                ("void".to_string(), TokenType::Type(Type::Void)),
+                ("int".to_string(), TokenType::Type(Type::Integer)),
+                ("byte".to_string(), TokenType::Type(Type::Byte)),
+                ("short".to_string(), TokenType::Type(Type::Short)),
+                ("char".to_string(), TokenType::Type(Type::Char)),
+                ("long".to_string(), TokenType::Type(Type::Long)),
+                ("float".to_string(), TokenType::Type(Type::Float)),
+                ("double".to_string(), TokenType::Type(Type::Double)),
+                ("boolean".to_string(), TokenType::Type(Type::Boolean)),
+                ("String".to_string(), TokenType::Type(Type::String)),
+                ("function".to_string(), TokenType::Type(Type::Function)),
+                ("let".to_string(), TokenType::Type(Type::Variable)),
+                ("const".to_string(), TokenType::Type(Type::Constant)),
             ]),
-            types: HashMap::from([
-                ("void".to_string(),Type::Void),
-                ("int".to_string(),Type::Integer),
-                ("byte".to_string(),Type::Byte),
-                ("short".to_string(),Type::Short),
-                ("char".to_string(),Type::Char),
-                ("long".to_string(),Type::Long),
-                ("float".to_string(),Type::Float),
-                ("double".to_string(),Type::Double),
-                ("boolean".to_string(),Type::Boolean),
-                ("String".to_string(),Type::String),
-                ("function".to_string(),Type::Function),
-                ("let".to_string(),Type::Variable),
-                ("const".to_string(),Type::Constant),
+            ambiguous_debug: HashMap::from([
+                (">>".to_string(),
+                 {
+                     let symbol = ">>".red();
+                     format!("\">>\" could be either a right bit shift (16 {symbol} 2) or two closing angle brackets (<A<B{symbol})").to_string()
+                 })
             ]),
-            ambiguous: HashMap::from([
-                (TokenType::Comparison(Comparison::LessThan),TokenType::Keyword(Keyword::TypeArgumentStart)),
-                (TokenType::Comparison(Comparison::GreaterThan),TokenType::Keyword(Keyword::TypeArgumentEnd)),
-                (TokenType::Operation(Operation::BitRightShift),TokenType::Multiple(vec![TokenType::Keyword(Keyword::TypeArgumentEnd),TokenType::Keyword(Keyword::TypeArgumentEnd)])),
-            ]),
-            string_starters: vec!["\"".to_string(),"'".to_string()],
-            string_enders: vec!["\"".to_string(),"'".to_string()],
-            illegal_combinations: vec![
-                "=-".to_string(),
-                "=+".to_string(),
-                "&&!".to_string(),
-                "||!".to_string(),
-                "=\"".to_string(),
-                ").".to_string(),
-                "].".to_string(),
-                ">.".to_string(),
-                ">>-".to_string(),
-                "<<-".to_string(),
-                "<-".to_string(),
-                ">-".to_string(),
-                "\".".to_string(),
-            ]
+            string_starters: vec!["\"".to_string(), "'".to_string()],
+            string_enders: vec!["\"".to_string(), "'".to_string()],
         }
     }
 }
