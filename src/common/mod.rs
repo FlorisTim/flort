@@ -51,7 +51,8 @@ pub enum Operation{
     BitAnd,
     BitOr,
     BitLeftShift,
-    BitRightShift
+    BitRightShift,
+    BitFlip,
 }
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum BooleanOperation{
@@ -89,8 +90,9 @@ pub enum Keyword{
     OperationAssignment(Operation),
     BooleanOperationAssignment(BooleanOperation),
     Arrow,
-    FatArrow
+    FatArrow,
 
+    This,
 }
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum Type{
@@ -114,6 +116,7 @@ pub enum Type{
 
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum TokenType{
+    EndOfFile,
     Unknown,
     Comparison(Comparison),
     Operation(Operation),
@@ -135,7 +138,7 @@ pub enum TokenType{
 pub enum ReadMode{
     Normal,
     Syntax,
-    String
+    String(String, usize),
 }
 pub enum ScopeSymbol{
     Indent(char),
@@ -150,7 +153,6 @@ pub struct Token{
 pub struct CompilerConfig{
     pub normal_chars: Vec<char>,
     pub syntax_chars: Vec<char>,
-    pub always_singular: Vec<char>,
     pub scope: ScopeSymbol,
     pub decimal: char,
     pub splitter: char,
@@ -183,9 +185,8 @@ impl CompilerConfig {
                 ("0b".to_string(), 2),
                 ("0o".to_string(), 8),
             ]),
-            normal_chars: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".chars().collect(),
-            always_singular: "#()[]{}~?,;:\r\n".chars().collect(),
-            syntax_chars: "!@#$%^&*{}()[]<>.,/\\\"':;`~?=+-".chars().collect(),
+            normal_chars: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_\"'`".chars().collect(),
+            syntax_chars: "!@#$%^&|*{}()[]<>.,/\\\x04:;~?=+-".chars().collect(),
             number_values: HashMap::from([
                 ('0', 0),
                 ('1', 1),
@@ -218,6 +219,7 @@ impl CompilerConfig {
                 ("true".to_string(), TokenType::Constant(Constant::True)),
                 ("false".to_string(), TokenType::Constant(Constant::False)),
                 ("null".to_string(), TokenType::Constant(Constant::Null)),
+                ("this".to_string(), TokenType::Keyword(Keyword::This)),
                 ("=".to_string(), TokenType::Keyword(Keyword::Assignment)),
                 (",".to_string(), TokenType::Keyword(Keyword::ArgumentSeperator)),
                 (".".to_string(), TokenType::Keyword(Keyword::FieldAccess)),
@@ -243,6 +245,7 @@ impl CompilerConfig {
                 ("||=".to_string(), TokenType::Keyword(Keyword::BooleanOperationAssignment(BooleanOperation::Or))),
                 //operators
                 ("+".to_string(), TokenType::Operation(Operation::Add)),
+                ("~".to_string(), TokenType::Operation(Operation::BitFlip)),
                 ("-".to_string(), TokenType::Operation(Operation::Subtract)),
                 ("/".to_string(), TokenType::Operation(Operation::Divide)),
                 ("*".to_string(), TokenType::Operation(Operation::Multiply)),

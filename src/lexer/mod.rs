@@ -1,3 +1,4 @@
+use std::ops::Index;
 use std::process::exit;
 use colored::Colorize;
 use macroquad::logging::{error, warn};
@@ -8,6 +9,11 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a>{
+    fn sum_hash(input: &str) -> i32{
+        let mut out = 0;
+        for c in input.chars() { out += c as i32; }
+        out
+    }
     pub fn new(config: &'a CompilerConfig) -> Lexer<'a> {
         Lexer{config, output_tokens: Vec::new()}
     }
@@ -35,7 +41,7 @@ impl<'a> Lexer<'a>{
     }
 }
 
-//we must assume utf8
+//WE MUST ASSUME UTF8
 impl<'a> Lexer<'_>
 {
     pub fn valid_number(&self, string: &String) -> bool {
@@ -81,76 +87,100 @@ impl<'a> Lexer<'_>
         if self.config.syntax_chars.contains(&character) {ReadMode::Syntax} else {ReadMode::Normal}
     }
     pub fn get_tokens(&mut self, input: &str) {
-        let mut index: usize = 0;
+        let mut index: usize = 3;
         let mut reading_mode: ReadMode = ReadMode::Normal;
         let mut current_string: String = String::new();
-        let mut indent_stack: Vec<u8> = Vec::new();
+        //let mut indent_stack: Vec<u8> = Vec::new();
         let mut newline_reached: bool = true;
-        let mut indent_chars: u8 = 0;
-        let mut indent_level: usize = 0;
-        //todo string handling
-        for c in input.chars() {
-            index+=1;
-            let splitter =  c == self.config.splitter;
-            let next_cleared_string = if splitter {String::new()} else {c.to_string()};
-            let next_string = current_string.clone() + &*next_cleared_string;
+        //let mut indent_chars: u8 = 0;
+        //let mut indent_level: usize = 0;
 
-            let mut determined_type = self.token_type(&current_string).clone();
-            let current_rm = self.read_mode_of(c);
-            //begin check
+        let chars = input.chars();
+        for c in chars {
+            if let ReadMode::String(ref end_string, string_type) = reading_mode {
+                current_string.push(c);
+                    if current_string.ends_with(end_string) {
+                        reading_mode = ReadMode::Normal;
+                        self.output_tokens.push(Token::new(&TokenType::RawString(string_type), &current_string, index));
+                        current_string.clear();
+                        continue;
+                    }
+            } else {
+                let splitter = c == self.config.splitter;
+                let next_cleared_string = if splitter { String::new() } else { c.to_string() };
+                let next_string = current_string.clone() + &*next_cleared_string;
 
-            //indentation handling
-            if c == '\r' || c == '\n' { index -= 1; newline_reached = true; continue}
-            if let ScopeSymbol::Indent(indent) = &self.config.scope {
-                let indent = *indent;
-                if c != indent {newline_reached = false;}
-                //todo...
-            } else if let ScopeSymbol::OpenClose(chars) = &self.config.scope {
-                let enter = current_string == chars[0].to_string();
-                let exit = current_string == chars[1].to_string();
-                if enter || exit {
-                    self.output_tokens.push(Token::new(&TokenType::Keyword( if enter {Keyword::ScopeEnter} else {Keyword::ScopeExit}), &current_string,index));
-                    current_string = next_cleared_string;
-                    reading_mode = ReadMode::Normal;
+                let determined_type = self.token_type(&current_string).clone();
+                let current_rm = self.read_mode_of(c);
+                //begin check
+                if self.config.string_starters.contains(&current_string) &&
+                    !self.config.string_starters.contains(&next_string) {
+                    let string_type = self.config.string_starters.iter().position(|a| a == &current_string).unwrap_or(0);
+                    let end_string = &self.config.string_starters[string_type];
+                    reading_mode = ReadMode::String(end_string.clone(), string_type);
+                    current_string = next_string;
                     continue;
                 }
-            }
 
-            //numbers check if next string is a valid number, then skip this cycle (to make 5. be a number and not 5 and a field access)
-            //if next string ia not valid check if im valid, and either the next symbol is the splitter or the next symbol is a different readmode
-            //for example so that 5.5.pow(3) is recognized as 5.5, field access, pow(3). (5.5. isnt a valid number anymore), this will cause 5.5.5.5 to be 5.5 and then .5 and .5
+                //indentation handling
+                if c == '\r' || c == '\n' {
+                    index += 1;
+                    newline_reached = true;
+                    continue
+                }
+                if let ScopeSymbol::Indent(indent) = &self.config.scope {
+                    let indent = *indent;
+                    if c != indent { newline_reached = false; }
+                    //todo...
+                } else if let ScopeSymbol::OpenClose(chars) = &self.config.scope {
+                    let enter = current_string == chars[0].to_string();
+                    let exit = current_string == chars[1].to_string();
+                    if enter || exit {
+                        self.output_tokens.push(Token::new(&TokenType::Keyword(if enter { Keyword::ScopeEnter } else { Keyword::ScopeExit }), &current_string, index));
+                        current_string = next_cleared_string;
+                        reading_mode = ReadMode::Normal;
+                        continue;
+                    }
+                }
 
-            //also if interupted "0 x5" then its not valid anymore
-            if self.valid_number(&next_string) && !splitter {
+                //numbers check if next string is a valid number, then skip this cycle (to make 5. be a number and not 5 and a field access)
+                //if next string ia not valid check if im valid, and either the next symbol is the splitter or the next symbol is a different readmode
+                //for example so that 5.5.pow(3) is recognized as 5.5, field access, pow(3). (5.5. isnt a valid number anymore), this will cause 5.5.5.5 to be 5.5 and then .5 and .5
+
+                //also if interupted "0 x5" then its not valid anymore
+                if self.valid_number(&next_string) && !splitter {
+                    current_string = next_string;
+                    continue;
+                } else if self.valid_number(&current_string) && (c == self.config.splitter || reading_mode != current_rm) {
+                    self.output_tokens.push(Token::new(&TokenType::Operand, &current_string, index));
+                    reading_mode = current_rm;
+                    current_string = next_cleared_string;
+                    continue;
+                }
+
+                //if read mode of c is not current rm then emit token (example: "abc!?*" gets split into "abc" and "!?*")
+                if reading_mode != current_rm || splitter {
+                    self.output_tokens.push(Token::new(&determined_type, &current_string, index));
+                    reading_mode = current_rm;
+                    current_string = next_cleared_string;
+                    continue;
+                }
+
+                //if read mode is syntax, consume the first valid token so "+=" becomes "+=" and "=+" turns into "+" and "="
+                if let ReadMode::Syntax = reading_mode {
+                    let next_determined_type = self.token_type(&next_string);
+                    if let TokenType::Unknown = next_determined_type {
+                        self.output_tokens.push(Token::new(&determined_type, &current_string, index));
+                        current_string = next_cleared_string;
+                        continue;
+                    }
+                }
+
+
+                //end checks
+
                 current_string = next_string;
-                continue;
-            } else if self.valid_number(&current_string) && (c == self.config.splitter || reading_mode != current_rm){
-                self.output_tokens.push(Token::new(&TokenType::Operand, &current_string,index));
-                reading_mode = current_rm;
-                current_string = next_cleared_string;
-                continue;
             }
-
-            //if read mode of c is not current rm then emit token (example: "abc!?*" gets split into "abc" and "!?*")
-            if reading_mode != current_rm || splitter{
-                self.output_tokens.push(Token::new(&determined_type, &current_string,index));
-                reading_mode = current_rm;
-                current_string = next_cleared_string;
-                continue;
-            }
-
-            //if read mode is syntax, consume the first valid token so "+=" becomes "+=" and "=+" turns into "+" and "="
-            if let ReadMode::Syntax = reading_mode {
-                let next_determined_type = self.token_type(&next_string);
-                if let TokenType::Unknown = next_determined_type{
-                    self.output_tokens.push(Token::new(&determined_type, &current_string,index));
-                    current_string = next_cleared_string;
-                    continue;
-                }
-            }
-            //end checks
-
-            current_string = next_string;
         }
         self.output_tokens.push(Token::new(self.token_type(&current_string), &current_string,index));
     }
@@ -160,8 +190,12 @@ impl<'a> Lexer<'_>
         let mut variables: Vec<&String> = Vec::new();
         let classes = Lexer::match_functions_class(&self.output_tokens, None);
         let functions = Lexer::match_functions_class(&self.output_tokens, Some(&classes));
+        let mut index: usize = 0;
         for token in &self.output_tokens {
+            index+=1;
             if let TokenType::Unknown = token.typ {
+                //skip last token (eof)
+                if index == self.output_tokens.len(){ continue; }
                 //quick fix for missed operands
                 if self.valid_number(&token.text){out.push(token.clone().with_type(TokenType::Operand)); continue}
                 if token.text.len() == 0{continue;}
@@ -209,26 +243,41 @@ impl<'a> Lexer<'_>
                     }
                 }
             }
+
             out.push(token.clone());
         }
         self.output_tokens = out
     }
 
     pub fn debug(&self){
-        let mut out = false;
+        let mut out = 0;
+        let mut depth: u32 = 0;
         let fatal = "Error".on_red();
         for t in &self.output_tokens{
-            let index = t.index.checked_sub(1).unwrap_or(0);
+            let index = t.index.checked_sub(1).unwrap_or(0)/2;
+            if let TokenType::Keyword(Keyword::ScopeEnter)  = t.typ {
+                depth+=1;
+            }
+            if let TokenType::Keyword(Keyword::ScopeExit)  = t.typ {
+                depth-=1;
+            }
             if let TokenType::Unknown  = t.typ {
-                println!("{fatal} {} {index}","unknown token at");
-                println!("      \"{}\" is never defined",t.text);
+                println!("{fatal} {} {index}","unknown token at line");
+                if let Some(tu) = self.config.keywords.iter().find(|(k,_)|{
+                    k.contains(&t.text) && (k.len() - t.text.len()) <= 2 ||
+                        Lexer::sum_hash(k) == Lexer::sum_hash(&*t.text)
+                }){
+                    println!("      \"{}\" has no meaning, maybe you meant \"{}\"?", t.text, tu.0);
+                } else {
+                    println!("      \"{}\" is never defined", t.text);
+                }
                 println!();
-                out = true;
+                out += 1;
             }
             if let TokenType::Ambiguous(a, b) = &t.typ {
                 let a = a.as_ref().clone();
                 let b = b.as_ref().clone();
-                println!("{fatal} {} {index}","ambiguous token at");
+                println!("{fatal} {} {index}","ambiguous token at line");
                 if let Some(msg) = self.config.ambiguous_debug.get(&t.text){
                     println!("      {}", msg);
                 } else
@@ -238,13 +287,16 @@ impl<'a> Lexer<'_>
                     println!("          2. {b:?}");
                 }
                 println!();
-                out = true;
+                out += 1;
             }
         }
-        if out {
-            println!("{}", "Lexer output invalid!!! Can't start doing anything else, Read previous outputs for how badly you messed up.");
+        if depth != 0{
+            println!("{fatal} {}","brackets not closed");
+            println!();
+        }
+        if out > 0 {
+            println!("{}{}{}","(".on_red(),out.to_string().on_red(), " errors)".on_red());
             exit(65);
         }
-        println!("{}", "[SUCCESS]".on_green());
     }
 }
