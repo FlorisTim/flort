@@ -165,13 +165,30 @@ impl<'a> Parser<'a>{
     }
 }
 
+pub struct FieldDescription<'a>{
+    name: &'a str,
+    typ: Type,
+    value: Option<Expression>,
+    private: bool,
+    stat: bool,
+    mutable: bool,
+}
+
+pub struct MethodDescription<'a>{
+    name: &'a str,
+    return_type: Type,
+    arguments: Arguments,
+    block: Expression,
+    private: bool,
+    stat: bool,
+}
 pub struct ClassDescription<'a>{
     source_tokens: &'a Vec<Token>,
     start_token_index: usize,
     end_token_index: usize,
     name: String,
-    fields: Vec<(String,Type,Value)>,
-    methods: Vec<(String,Type,Arguments)>,
+    fields: Vec<FieldDescription<'a>>,
+    methods: Vec<MethodDescription<'a>>,
 }
 
 

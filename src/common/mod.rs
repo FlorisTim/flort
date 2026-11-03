@@ -31,6 +31,7 @@ pub enum Comparison {
     LessThanOrEqual
 }
 
+
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum Constant{
     True,
