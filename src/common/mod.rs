@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 use colored::Colorize;
 pub type Base = i64;
 
@@ -6,7 +7,7 @@ impl Token{
     pub fn new(typ: &TokenType, text: &String, index: usize) -> Token{
         Token{typ: typ.clone(), text: text.clone(), index}
     }
-    pub fn from_type(typ: &TokenType, index: usize) -> Token{
+    pub fn from_type<'a>(typ: &TokenType, index: usize) -> Token{
         Token{typ: typ.clone(), text: "".to_string(), index}
     }
     pub fn from_string(text: &String, index: usize) -> Token{
@@ -92,9 +93,12 @@ pub enum Keyword{
     BooleanOperationAssignment(BooleanOperation),
     Arrow,
     FatArrow,
-
+    ArrayType,
     This,
 }
+
+pub type Impls = String;
+
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum Type{
     Void,
@@ -113,6 +117,7 @@ pub enum Type{
     Constant,
     Custom(String),
     Array(Box<Type>, u8),
+    WithGenerics(Box<Type>, Vec<Type>),
 }
 
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
@@ -126,7 +131,7 @@ pub enum TokenType{
     BooleanOperation(BooleanOperation),
     Constant(Constant),
     Identifier,
-    TypeIdentifier,
+    TypeIdentifier(Type),
     FuncIdentifier,
     Operand,
     RawString(usize),
@@ -163,12 +168,15 @@ pub struct CompilerConfig{
     pub number_systems: HashMap<String, Base>,
     pub string_starters: Vec<String>,
     pub string_enders: Vec<String>,
-    pub ambiguous_debug: HashMap<String, String>
+    pub ambiguous_debug: HashMap<String, String>,
+    pub escape_char: char,
+    pub type_assigners: Vec<TokenType>,
 }
 
 impl CompilerConfig {
     pub fn default() -> CompilerConfig {
         CompilerConfig {
+            //lexer
             number_suffixes: HashMap::from([
                 ("b".to_string(), Type::Byte),
                 ("s".to_string(), Type::Short),
@@ -213,6 +221,7 @@ impl CompilerConfig {
                 ('f', 15),
             ]),
             decimal: '.',
+            escape_char: '.',
             scope: ScopeSymbol::OpenClose(['{','}']),
             splitter: ' ',
             keywords: HashMap::from([
@@ -221,6 +230,8 @@ impl CompilerConfig {
                 ("false".to_string(), TokenType::Constant(Constant::False)),
                 ("null".to_string(), TokenType::Constant(Constant::Null)),
                 ("this".to_string(), TokenType::Keyword(Keyword::This)),
+                //setters splitters etc
+                ("[]".to_string(), TokenType::Keyword(Keyword::ArrayType)),
                 ("=".to_string(), TokenType::Keyword(Keyword::Assignment)),
                 (",".to_string(), TokenType::Keyword(Keyword::ArgumentSeperator)),
                 (".".to_string(), TokenType::Keyword(Keyword::FieldAccess)),
@@ -280,7 +291,7 @@ impl CompilerConfig {
                 ("==".to_string(), TokenType::Comparison(Comparison::Equals)),
                 ("!=".to_string(), TokenType::Comparison(Comparison::NotEquals)),
                 // keywords
-                ("if".to_string(), TokenType::Keyword(Keyword::If)),
+                ("poop".to_string(), TokenType::Keyword(Keyword::If)),
                 ("else".to_string(), TokenType::Keyword(Keyword::Else)),
                 ("while".to_string(), TokenType::Keyword(Keyword::While)),
                 ("for".to_string(), TokenType::Keyword(Keyword::For)),
@@ -314,6 +325,11 @@ impl CompilerConfig {
             ]),
             string_starters: vec!["\"".to_string(), "'".to_string()],
             string_enders: vec!["\"".to_string(), "'".to_string()],
+            //parser
+            type_assigners: vec![
+                TokenType::Keyword(Keyword::TypeSpecifier),
+                TokenType::Keyword(Keyword::Arrow),
+            ]
         }
     }
 }

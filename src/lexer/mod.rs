@@ -1,40 +1,73 @@
-use std::ops::Index;
-use std::process::exit;
-use colored::Colorize;
-use macroquad::logging::{error, warn};
+use crate::common::Type::Custom;
 use crate::common::*;
+use colored::Colorize;
+use macroquad::math::Vec2;
+use macroquad::prelude::scene::{add_node, clear};
+use std::ops::Deref;
+use std::process::exit;
+
 pub struct Lexer<'a> {
     pub(crate) config: &'a CompilerConfig,
-    pub(crate) output_tokens: Vec<Token>
+    pub(crate) output_tokens: Vec<Token>,
 }
 
-impl<'a> Lexer<'a>{
-    fn sum_hash(input: &str) -> i32{
+impl<'a> Lexer<'a> {
+    fn sum_hash(input: &str) -> i32 {
         let mut out = 0;
-        for c in input.chars() { out += c as i32; }
+        for c in input.chars() {
+            out += c as i32;
+        }
         out
     }
     pub fn new(config: &'a CompilerConfig) -> Lexer<'a> {
-        Lexer{config, output_tokens: Vec::new()}
+        Lexer {
+            config,
+            output_tokens: Vec::new(),
+        }
     }
-    fn match_functions_class(input: &Vec<Token>, custom_types: Option<&Vec<String>>) -> Vec<String> {
+    fn match_functions_class(
+        input: &Vec<Token>,
+        custom_types: Option<&Vec<String>>,
+    ) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for i in 1..input.len() {
-            let last_token = if let Some(last_token) = input.get(i - 1) { last_token } else { continue };
-            let next_token = if let Some(next_token) = input.get(i + 1) { next_token } else { continue };
-            let current_token = if let Some(current_token) = input.get(i) { current_token } else { continue }; //would be weird if this continues
-            if !(
-                (custom_types.is_some() && (next_token.typ == TokenType::Keyword(Keyword::ArgumentStart) ||
-                    next_token.typ == TokenType::Keyword(Keyword::TypeArgumentStart))) ||
-                    custom_types.is_none()
-            ) { continue; }
+            let last_token = if let Some(last_token) = input.get(i - 1) {
+                last_token
+            } else {
+                continue;
+            };
+            let next_token = if let Some(next_token) = input.get(i + 1) {
+                next_token
+            } else {
+                continue;
+            };
+            let current_token = if let Some(current_token) = input.get(i) {
+                current_token
+            } else {
+                continue;
+            }; //would be weird if this continues
+            if !((custom_types.is_some()
+                && (next_token.typ == TokenType::Keyword(Keyword::ArgumentStart)
+                    || next_token.typ == TokenType::Keyword(Keyword::TypeArgumentStart)))
+                || custom_types.is_none())
+            {
+                continue;
+            }
             if let Some(types) = custom_types {
-                if let TokenType::Type(_) = last_token.typ { out.push(current_token.text.clone()); }
-                if let TokenType::Keyword(Keyword::ArrayEnd) = last_token.typ { out.push(current_token.text.clone()); }
-                if types.contains(&last_token.text) { out.push(current_token.text.clone()); }
+                if let TokenType::Type(_) = last_token.typ {
+                    out.push(current_token.text.clone());
+                }
+                if let TokenType::Keyword(Keyword::ArrayEnd) = last_token.typ {
+                    out.push(current_token.text.clone());
+                }
+                if types.contains(&last_token.text) {
+                    out.push(current_token.text.clone());
+                }
             }
             if let None = custom_types {
-                if let TokenType::Keyword(Keyword::Class) = last_token.typ { out.push(current_token.text.clone()); }
+                if let TokenType::Keyword(Keyword::Class) = last_token.typ {
+                    out.push(current_token.text.clone());
+                }
             }
         }
         out
@@ -42,15 +75,18 @@ impl<'a> Lexer<'a>{
 }
 
 //WE MUST ASSUME UTF8
-impl<'a> Lexer<'_>
-{
+impl<'a> Lexer<'_> {
     pub fn valid_number(&self, string: &String) -> bool {
-        let base_option = self.config.number_systems
+        let base_option = self
+            .config
+            .number_systems
             .iter()
-            .find(|(pre, base)| { string.starts_with(*pre) });
-        let suffix_option = self.config.number_suffixes
+            .find(|(pre, base)| string.starts_with(*pre));
+        let suffix_option = self
+            .config
+            .number_suffixes
             .iter()
-            .find(|(pre, base)| { string.ends_with(*pre) });
+            .find(|(pre, base)| string.ends_with(*pre));
         let mut base = 10;
         let base_len = match base_option {
             None => 0,
@@ -61,30 +97,52 @@ impl<'a> Lexer<'_>
         };
         let suffix_len = match suffix_option {
             None => 0,
-            Some((str, _)) => str.len()
+            Some((str, _)) => str.len(),
         };
-        if string.len() <= base_len {return false;};
-        let test_string = &string[base_len..string.len()-suffix_len];
-        if test_string.len() == 0 {return false;}
+        if string.len() <= base_len {
+            return false;
+        };
+        let test_string = &string[base_len..string.len() - suffix_len];
+        if test_string.len() == 0 {
+            return false;
+        }
         let mut decimal = false;
         for c in test_string.chars() {
-            if c == self.config.decimal{
-                if decimal {return false}
+            if c == self.config.decimal {
+                if decimal {
+                    return false;
+                }
                 decimal = true;
             } else {
                 match self.config.number_values.get(&c) {
-                    Some(num) => if *num >= base as u8 { return false },
-                    None => return false
+                    Some(num) => {
+                        if *num >= base as u8 {
+                            return false;
+                        }
+                    }
+                    None => return false,
                 }
             }
         }
-        if decimal && test_string.len() == 1 {false} else {true}
+        if decimal && test_string.len() == 1 {
+            false
+        } else {
+            true
+        }
     }
-    fn token_type(&self, string: &String) -> &TokenType{
-        if let Some(t) = self.config.keywords.get(string) {t} else {&TokenType::Unknown}
+    fn token_type(&self, string: &String) -> &TokenType {
+        if let Some(t) = self.config.keywords.get(string) {
+            t
+        } else {
+            &TokenType::Unknown
+        }
     }
     fn read_mode_of(&self, character: char) -> ReadMode {
-        if self.config.syntax_chars.contains(&character) {ReadMode::Syntax} else {ReadMode::Normal}
+        if self.config.syntax_chars.contains(&character) {
+            ReadMode::Syntax
+        } else {
+            ReadMode::Normal
+        }
     }
     pub fn get_tokens(&mut self, input: &str) {
         let mut index: usize = 3;
@@ -99,23 +157,37 @@ impl<'a> Lexer<'_>
         for c in chars {
             if let ReadMode::String(ref end_string, string_type) = reading_mode {
                 current_string.push(c);
-                    if current_string.ends_with(end_string) {
-                        reading_mode = ReadMode::Normal;
-                        self.output_tokens.push(Token::new(&TokenType::RawString(string_type), &current_string, index));
-                        current_string.clear();
-                        continue;
-                    }
+                if current_string.ends_with(end_string) {
+                    reading_mode = ReadMode::Normal;
+                    self.output_tokens.push(Token::new(
+                        &TokenType::RawString(string_type),
+                        &current_string,
+                        index,
+                    ));
+                    current_string.clear();
+                    continue;
+                }
             } else {
                 let splitter = c == self.config.splitter;
-                let next_cleared_string = if splitter { String::new() } else { c.to_string() };
+                let next_cleared_string = if splitter {
+                    String::new()
+                } else {
+                    c.to_string()
+                };
                 let next_string = current_string.clone() + &*next_cleared_string;
 
                 let determined_type = self.token_type(&current_string).clone();
                 let current_rm = self.read_mode_of(c);
                 //begin check
-                if self.config.string_starters.contains(&current_string) &&
-                    !self.config.string_starters.contains(&next_string) {
-                    let string_type = self.config.string_starters.iter().position(|a| a == &current_string).unwrap_or(0);
+                if self.config.string_starters.contains(&current_string)
+                    && !self.config.string_starters.contains(&next_string)
+                {
+                    let string_type = self
+                        .config
+                        .string_starters
+                        .iter()
+                        .position(|a| a == &current_string)
+                        .unwrap_or(0);
                     let end_string = &self.config.string_starters[string_type];
                     reading_mode = ReadMode::String(end_string.clone(), string_type);
                     current_string = next_string;
@@ -126,17 +198,27 @@ impl<'a> Lexer<'_>
                 if c == '\r' || c == '\n' {
                     index += 1;
                     newline_reached = true;
-                    continue
+                    continue;
                 }
                 if let ScopeSymbol::Indent(indent) = &self.config.scope {
                     let indent = *indent;
-                    if c != indent { newline_reached = false; }
+                    if c != indent {
+                        newline_reached = false;
+                    }
                     //todo...
                 } else if let ScopeSymbol::OpenClose(chars) = &self.config.scope {
                     let enter = current_string == chars[0].to_string();
                     let exit = current_string == chars[1].to_string();
                     if enter || exit {
-                        self.output_tokens.push(Token::new(&TokenType::Keyword(if enter { Keyword::ScopeEnter } else { Keyword::ScopeExit }), &current_string, index));
+                        self.output_tokens.push(Token::new(
+                            &TokenType::Keyword(if enter {
+                                Keyword::ScopeEnter
+                            } else {
+                                Keyword::ScopeExit
+                            }),
+                            &current_string,
+                            index,
+                        ));
                         current_string = next_cleared_string;
                         reading_mode = ReadMode::Normal;
                         continue;
@@ -151,8 +233,14 @@ impl<'a> Lexer<'_>
                 if self.valid_number(&next_string) && !splitter {
                     current_string = next_string;
                     continue;
-                } else if self.valid_number(&current_string) && (c == self.config.splitter || reading_mode != current_rm) {
-                    self.output_tokens.push(Token::new(&TokenType::Operand, &current_string, index));
+                } else if self.valid_number(&current_string)
+                    && (c == self.config.splitter || reading_mode != current_rm)
+                {
+                    self.output_tokens.push(Token::new(
+                        &TokenType::Operand,
+                        &current_string,
+                        index,
+                    ));
                     reading_mode = current_rm;
                     current_string = next_cleared_string;
                     continue;
@@ -160,7 +248,8 @@ impl<'a> Lexer<'_>
 
                 //if read mode of c is not current rm then emit token (example: "abc!?*" gets split into "abc" and "!?*")
                 if reading_mode != current_rm || splitter {
-                    self.output_tokens.push(Token::new(&determined_type, &current_string, index));
+                    self.output_tokens
+                        .push(Token::new(&determined_type, &current_string, index));
                     reading_mode = current_rm;
                     current_string = next_cleared_string;
                     continue;
@@ -170,19 +259,29 @@ impl<'a> Lexer<'_>
                 if let ReadMode::Syntax = reading_mode {
                     let next_determined_type = self.token_type(&next_string);
                     if let TokenType::Unknown = next_determined_type {
-                        self.output_tokens.push(Token::new(&determined_type, &current_string, index));
+                        self.output_tokens.push(Token::new(
+                            &determined_type,
+                            &current_string,
+                            index,
+                        ));
                         current_string = next_cleared_string;
                         continue;
                     }
                 }
-
 
                 //end checks
 
                 current_string = next_string;
             }
         }
-        self.output_tokens.push(Token::new(self.token_type(&current_string), &current_string,index));
+        self.output_tokens.push(Token::new(
+            self.token_type(&current_string),
+            &current_string,
+            index,
+        ));
+        self.resolve_ambiguous();
+        self.debug();
+        self.resolve_type_args();
     }
 
     pub fn resolve_ambiguous(&mut self) {
@@ -190,26 +289,45 @@ impl<'a> Lexer<'_>
         let mut variables: Vec<&String> = Vec::new();
         let classes = Lexer::match_functions_class(&self.output_tokens, None);
         let functions = Lexer::match_functions_class(&self.output_tokens, Some(&classes));
+        let mut char_index: usize = 0;
         let mut index: usize = 0;
         for token in &self.output_tokens {
-            index+=1;
+            char_index += 1;
+            index += 1;
             if let TokenType::Unknown = token.typ {
                 //skip last token (eof)
-                if index == self.output_tokens.len(){ continue; }
+                if index == self.output_tokens.len() {
+                    continue;
+                }
                 //quick fix for missed operands
-                if self.valid_number(&token.text){out.push(token.clone().with_type(TokenType::Operand)); continue}
-                if token.text.len() == 0{continue;}
-                if functions.contains(&token.text) { out.push(token.clone().with_type(TokenType::FuncIdentifier)); continue }
-                if classes.contains(&token.text) { out.push(token.clone().with_type(TokenType::TypeIdentifier)); continue }
+                if self.valid_number(&token.text) {
+                    out.push(token.clone().with_type(TokenType::Operand));
+                    continue;
+                }
+                if token.text.len() == 0 {
+                    continue;
+                }
+                if functions.contains(&token.text) {
+                    out.push(token.clone().with_type(TokenType::FuncIdentifier));
+                    continue;
+                }
+                if classes.contains(&token.text) {
+                    out.push(
+                        token
+                            .clone()
+                            .with_type(TokenType::TypeIdentifier(Custom(token.text.clone()))),
+                    );
+                    continue;
+                }
                 if let Some(last) = out.last() {
                     if let TokenType::Type(_) = last.typ {
                         variables.push(&token.text);
                         out.push(token.clone().with_type(TokenType::Identifier));
                         continue;
                     }
-                    if TokenType::Keyword(Keyword::ArrayEnd) == last.typ ||
-                       TokenType::Keyword(Keyword::TypeArgumentEnd) == last.typ ||
-                       TokenType::Keyword(Keyword::ArgumentEnd) == last.typ
+                    if TokenType::Keyword(Keyword::ArrayEnd) == last.typ
+                        || TokenType::Keyword(Keyword::TypeArgumentEnd) == last.typ
+                        || TokenType::Keyword(Keyword::ArgumentEnd) == last.typ
                     {
                         variables.push(&token.text);
                         out.push(token.clone().with_type(TokenType::Identifier));
@@ -229,13 +347,22 @@ impl<'a> Lexer<'_>
             if let TokenType::Ambiguous(a, b) = &token.typ {
                 if let Some(last) = out.last() {
                     let index = last.index;
-                    if let TokenType::Unknown = last.typ {out.push(token.clone()); continue}
-                    let token_type: &TokenType = if
-                    last.typ == TokenType::Operand ||
-                        last.typ == TokenType::Keyword(Keyword::ArgumentEnd) ||
-                        last.typ == TokenType::Identifier { a } else { b };
+                    if let TokenType::Unknown = last.typ {
+                        out.push(token.clone());
+                        continue;
+                    }
+                    let token_type: &TokenType = if last.typ == TokenType::Operand
+                        || last.typ == TokenType::Keyword(Keyword::ArgumentEnd)
+                        || last.typ == TokenType::Identifier
+                    {
+                        a
+                    } else {
+                        b
+                    };
                     if let TokenType::Multiple(vec) = token_type {
-                        vec.iter().for_each(|t|{out.push(Token::from_type(t,index));});
+                        vec.iter().for_each(|t| {
+                            out.push(Token::from_type(t, index));
+                        });
                         continue;
                     } else {
                         out.push(Token::from_type(token_type, index));
@@ -243,31 +370,179 @@ impl<'a> Lexer<'_>
                     }
                 }
             }
-
+            let mut pop = false;
+            if let TokenType::Keyword(Keyword::ArrayType) = &token.typ {
+                if let Some(last) = out.last() {
+                    if let TokenType::Type(typ) = &last.typ {
+                        if let Type::Array(a, b) = typ {
+                            pop = true;
+                            out.push(Token::from_type(
+                                &TokenType::Type(Type::Array(a.clone(), b + 1)),
+                                index,
+                            ));
+                        } else {
+                            pop = true;
+                            out.push(Token::from_type(
+                                &TokenType::Type(Type::Array(Box::from(typ.clone()), 0)),
+                                index,
+                            ));
+                        }
+                    }
+                }
+            }
+            if pop {
+                out.remove(out.len() - 2);
+                continue;
+            }
             out.push(token.clone());
         }
-        self.output_tokens = out
+        self.output_tokens = out;
     }
 
-    pub fn debug(&self){
+    fn resolve_type_args(&mut self) {
+        let mut out: Vec<Token> = Vec::new();
+        let mut last_type: &Type = &Type::Void;
+
+        let mut last_sign_token_type: &TokenType = &TokenType::Unknown;
+
+        let mut test;
+        let mut index = 0;
+
+        while index < self.output_tokens.len() {
+            //grab current token type and line index
+            let ot: &Token = if let Some(t) = self.output_tokens.get(index) {
+                &t
+            } else {
+                continue;
+            };
+            let line = ot.index;
+            let typ = &ot.typ;
+            //if token is a type/custom type set last type to it
+            if let Some(typ) = self.is_type(typ) {
+                last_type = typ
+            }
+
+            last_sign_token_type = if self.is_significant(typ) {
+                typ
+            } else {
+                last_sign_token_type
+            };
+
+            //if touching a <
+            if let TokenType::Keyword(Keyword::TypeArgumentStart) = typ {
+                if let TokenType::FuncIdentifier = last_sign_token_type {
+                    //..
+                } else {
+                    test = self.recursive_type_parsing(last_type, index);
+                    index = test.1;
+                    out.push(Token::from_type(&TokenType::Type(test.0), ot.index));
+                    continue;
+                }
+            }
+
+            out.push(ot.clone());
+            index += 1;
+        }
+
+        self.output_tokens = out;
+    }
+
+    fn recursive_type_parsing(&self, original_type: &Type, mut index: usize) -> (Type, usize) {
+        index += 1;
+
+        let mut gathered: Vec<Type> = Vec::new();
+        let mut last_type: &Type = &Type::Void;
+
+        let mut test;
+        while index < self.output_tokens.len() {
+            let ot: &Token = if let Some(t) = self.output_tokens.get(index) {
+                &t
+            } else {
+                break;
+            };
+            let typ = &ot.typ;
+            if let Some(typ) = self.is_type(typ) {
+                last_type = typ;
+            }
+
+            if let TokenType::Keyword(Keyword::TypeArgumentStart) = typ {
+                test = self.recursive_type_parsing(last_type, index);
+                index = test.1;
+                last_type = &test.0;
+            }
+
+            if self.is_delimiter(typ) {
+                gathered.push((*last_type).clone());
+            }
+
+            if let TokenType::Keyword(Keyword::TypeArgumentEnd) = typ {
+                println!(">");
+                //index += 1;
+                break;
+            }
+
+            index += 1
+        }
+
+        (
+            Type::WithGenerics(Box::from(original_type.clone()), gathered),
+            index,
+        )
+    }
+
+    fn is_significant(&self, t: &TokenType) -> bool {
+        if let TokenType::FuncIdentifier = t {
+            true
+        } else if let TokenType::Unknown = t {
+            true
+        } else if let TokenType::Keyword(Keyword::EndStatement) = t {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_delimiter(&self, t: &TokenType) -> bool {
+        if let TokenType::Keyword(Keyword::ArgumentSeperator) = t {
+            true
+        } else if let TokenType::Keyword(Keyword::TypeArgumentEnd) = t {
+            true
+        } else {
+            false
+        }
+    }
+    fn is_type<'b>(&self, t: &'b TokenType) -> Option<&'b Type> {
+        if let TokenType::Type(t) = t {
+            Some(t)
+        } else if let TokenType::TypeIdentifier(t) = t {
+            Some(t)
+        } else {
+            None
+        }
+    }
+
+    pub fn debug(&self) {
         let mut out = 0;
         let mut depth: u32 = 0;
         let fatal = "Error".on_red();
-        for t in &self.output_tokens{
-            let index = t.index.checked_sub(1).unwrap_or(0)/2;
-            if let TokenType::Keyword(Keyword::ScopeEnter)  = t.typ {
-                depth+=1;
+        for t in &self.output_tokens {
+            let index = t.index.checked_sub(1).unwrap_or(0) / 2;
+            if let TokenType::Keyword(Keyword::ScopeEnter) = t.typ {
+                depth += 1;
             }
-            if let TokenType::Keyword(Keyword::ScopeExit)  = t.typ {
-                depth-=1;
+            if let TokenType::Keyword(Keyword::ScopeExit) = t.typ {
+                depth -= 1;
             }
-            if let TokenType::Unknown  = t.typ {
-                println!("{fatal} {} {index}","unknown token at line");
-                if let Some(tu) = self.config.keywords.iter().find(|(k,_)|{
-                    k.contains(&t.text) && (k.len() - t.text.len()) <= 2 ||
-                        Lexer::sum_hash(k) == Lexer::sum_hash(&*t.text)
-                }){
-                    println!("      \"{}\" has no meaning, maybe you meant \"{}\"?", t.text, tu.0);
+            if let TokenType::Unknown = t.typ {
+                println!("{fatal} {} {index}", "unknown token at line");
+                if let Some(tu) = self.config.keywords.iter().find(|(k, _)| {
+                    k.contains(&t.text) && (k.len() - t.text.len()) <= 2
+                        || Lexer::sum_hash(k) == Lexer::sum_hash(&*t.text)
+                }) {
+                    println!(
+                        "      \"{}\" has no meaning, maybe you meant \"{}\"?",
+                        t.text, tu.0
+                    );
                 } else {
                     println!("      \"{}\" is never defined", t.text);
                 }
@@ -277,11 +552,10 @@ impl<'a> Lexer<'_>
             if let TokenType::Ambiguous(a, b) = &t.typ {
                 let a = a.as_ref().clone();
                 let b = b.as_ref().clone();
-                println!("{fatal} {} {index}","ambiguous token at line");
-                if let Some(msg) = self.config.ambiguous_debug.get(&t.text){
+                println!("{fatal} {} {index}", "ambiguous token at line");
+                if let Some(msg) = self.config.ambiguous_debug.get(&t.text) {
                     println!("      {}", msg);
-                } else
-                {
+                } else {
                     println!("      \"{}\" could be", t.text);
                     println!("          1. {a:?}");
                     println!("          2. {b:?}");
@@ -289,13 +563,28 @@ impl<'a> Lexer<'_>
                 println!();
                 out += 1;
             }
+            if let TokenType::Keyword(Keyword::ArrayType) = &t.typ {
+                println!("{fatal} {} {index}", "unfitting array token at line");
+                println!(
+                    "      \"{}\" should be used like \"TYPE{}\" not standalone.",
+                    t.text,
+                    "[]".red()
+                );
+                println!();
+                out += 1;
+            }
         }
-        if depth != 0{
-            println!("{fatal} {}","brackets not closed");
+        if depth != 0 {
+            println!("{fatal} {}", "brackets not closed");
             println!();
         }
         if out > 0 {
-            println!("{}{}{}","(".on_red(),out.to_string().on_red(), " errors)".on_red());
+            println!(
+                "{}{}{}",
+                "(".on_red(),
+                out.to_string().on_red(),
+                " errors)".on_red()
+            );
             exit(65);
         }
     }

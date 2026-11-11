@@ -1,14 +1,9 @@
-use std::collections::HashMap;
+
 use common::*;
 use crate::common;
 
-enum ExpressionParsing{
-    Pratt,
-    LeftToRight,
-}
-
 #[derive(Debug, Clone)]
-pub enum Value{
+pub enum Value<'a>{
     Int(i32),
     Float(f32),
     Bool(bool),
@@ -18,22 +13,22 @@ pub enum Value{
     Short(i16),
     Double(f64),
     String(String),
-    Function(String,Type,Arguments),
+    Function(String,Type,Arguments<'a>),
     Null
 }
-type Arguments = Vec<(Type,String)>;
-type Expression = Vec<Node>;
-enum Node{
-    Function(Type,String,Arguments),
-    ClassDefinition,
-    Initializer(Type,String,Expression),
+type Arguments<'a> = Vec<(&'a Type,&'a str)>;
+type Tree<'a> = Vec<Node<'a>>;
+enum Node<'a>{
+    Temp(&'a Vec<&'a Token>),
+    FunctionCall(String,Arguments<'a>),
+    Initializer(Type,String,Tree<'a>),
     Operator(Operation),
-    Operand(Type,Value),
+    Operand(Type,Value<'a>),
 }
 
 struct Parser<'a> {
     pub(crate) config: &'a CompilerConfig,
-    pub(crate) output_nodes: Vec<Node>,
+    pub(crate) output_nodes: Vec<Node<'a>>,
 }
 impl<'a> Parser<'a>
 {
@@ -126,37 +121,70 @@ impl<'a> Parser<'a>
     }
 }
 
+enum ClassReadMode{
+    Exploring,
+    ClassContract,
+    InClass,
+    FunctionContract,
+    InFunction,
+    DeclaredArgs,
+    GivenArgs
+}
+
 impl<'a> Parser<'a>{
 
-    pub fn get_classes(tokens: &Vec<Token>) -> Vec<ClassDescription> {
-        let mut out = Vec::new();
-        let mut vector: Vec<Token> = Vec::new();
-        let mut c_depth: u32 = 0;
-        let mut depth: u32 = 0;
-        let mut index: usize = 0;
-        let mut desc: ClassDescription = ClassDescription::new(tokens);
+    pub fn make_tree<'b>(&self, tokens: &'b Vec<&'b Token>) -> Tree<'b>{
+        let mut a = Tree::new();
+        a.push(Node::Temp(tokens));
+        a
+    }
 
-        let mut class_name = false;
+    pub fn get_classes(&mut self, tokens: &Vec<Token>) -> Vec<ClassDescription> {
+        let mut out = Vec::new();
+        let mut last_token: Option<&Token> = None;
+
+        let mut bracket_depth: usize = 0;
+        let mut mthd_bracket_depth: usize = 0;
+        let mut class_bracket_depth: usize = 0;
+
+        let mut collected: Vec<&Token> = Vec::new();
+
+        let mut current_class: ClassDescription = ClassDescription::new(tokens);
+        let mut current_method: MethodDescription = MethodDescription::new(tokens);
+        let mut current_field: FieldDescription = FieldDescription::new(tokens);
+
+        let mut last_mthd_ident: &str = "";
+        let mut last_var_ident: &str = "";
+        let mut last_var_type: &Type = &Type::Void;
+
+        let mut last_class_ident: &str = "";
+
+        let mut read_mode: ClassReadMode = ClassReadMode::Exploring;
         for t in tokens {
-            if let TokenType::Keyword(Keyword::ScopeEnter) = t.typ{ depth += 1; }
-            if let TokenType::Keyword(Keyword::ScopeExit) = t.typ{ depth -= 1; }
-            if let TokenType::Keyword(Keyword::Class) = t.typ {
-                c_depth = depth + 1;
-                desc.start_token_index = index;
-                class_name = false;
-            }
-            if !class_name {
-                if let TokenType::TypeIdentifier = t.typ {
-                    class_name = true;
-                    desc.name = t.text.clone();
+            if let TokenType::Keyword(Keyword::ScopeEnter) = t.typ { bracket_depth += 1; }
+            if let TokenType::Keyword(Keyword::ScopeExit) = t.typ { bracket_depth -= 1; }
+
+            if let ClassReadMode::InClass = read_mode {
+                if let Some(last) = last_token{
+                    if let TokenType::Identifier = &t.typ {
+                        if let TokenType::Identifier = &t.typ {
+
+                        }
+                    }
                 }
             }
-            if depth != c_depth {
-                desc.end_token_index = index;
-                out.push(desc);
-                desc = ClassDescription::new(tokens);
+
+            if let ClassReadMode::Exploring = read_mode{
+                if let Some(last) = last_token{
+                    if let TokenType::Keyword(Keyword::Class) = &last.typ {
+                        current_class = ClassDescription::new(tokens);
+                        current_class.name = last_class_ident;
+                    }
+                }
+                continue;
             }
-            index += 1;
+
+
         }
         out
     }
@@ -167,26 +195,52 @@ impl<'a> Parser<'a>{
 
 pub struct FieldDescription<'a>{
     name: &'a str,
-    typ: Type,
-    value: Option<Expression>,
+    typ: &'a Type,
+    value: Option<Tree<'a>>,
     private: bool,
     stat: bool,
     mutable: bool,
 }
 
+impl FieldDescription<'_>{
+    pub fn new(tokens: &Vec<Token>) -> FieldDescription {
+        FieldDescription{
+            name: "",
+            typ: &Type::Generic,
+            private: true,
+            stat: false,
+            mutable: true,
+            value: None
+        }
+    }
+}
+
 pub struct MethodDescription<'a>{
     name: &'a str,
-    return_type: Type,
-    arguments: Arguments,
-    block: Expression,
+    return_type: &'a Type,
+    arguments: Arguments<'a>,
+    block: Tree<'a>,
     private: bool,
     stat: bool,
+}
+
+impl MethodDescription<'_>{
+    pub fn new(tokens: &Vec<Token>) -> MethodDescription {
+        MethodDescription{
+            name: "",
+            return_type: &Type::Generic,
+            arguments: Vec::new(),
+            block: Vec::new(),
+            private: true,
+            stat: false,
+        }
+    }
 }
 pub struct ClassDescription<'a>{
     source_tokens: &'a Vec<Token>,
     start_token_index: usize,
     end_token_index: usize,
-    name: String,
+    name: &'a str,
     fields: Vec<FieldDescription<'a>>,
     methods: Vec<MethodDescription<'a>>,
 }
@@ -198,7 +252,7 @@ impl ClassDescription<'_>{
             source_tokens: tokens,
             start_token_index: 0,
             end_token_index: 0,
-            name: String::new(),
+            name: "",
             fields: Vec::new(),
             methods: Vec::new()
         }
