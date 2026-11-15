@@ -5,6 +5,7 @@ use macroquad::math::Vec2;
 use macroquad::prelude::scene::{add_node, clear};
 use std::ops::Deref;
 use std::process::exit;
+use crate::common;
 
 pub struct Lexer<'a> {
     pub(crate) config: &'a CompilerConfig,
@@ -54,13 +55,20 @@ impl<'a> Lexer<'a> {
                 continue;
             }
             if let Some(types) = custom_types {
+                let mut push = false;
                 if let TokenType::Type(_) = last_token.typ {
-                    out.push(current_token.text.clone());
+                    push = true;
                 }
                 if let TokenType::Keyword(Keyword::ArrayEnd) = last_token.typ {
-                    out.push(current_token.text.clone());
+                    push = true;
+                }
+                if let TokenType::Keyword(Keyword::TypeArgumentEnd) = last_token.typ {
+                    push = true;
                 }
                 if types.contains(&last_token.text) {
+                    push = true;
+                }
+                if push{
                     out.push(current_token.text.clone());
                 }
             }
@@ -280,9 +288,13 @@ impl<'a> Lexer<'_> {
             index,
         ));
         self.resolve_ambiguous();
-        self.debug();
+        //self.debug();
         self.resolve_type_args();
+        self.resolve_array_types();
+        self.resolve_missed();
     }
+
+
 
     pub fn resolve_ambiguous(&mut self) {
         let mut out: Vec<Token> = Vec::new();
@@ -370,6 +382,25 @@ impl<'a> Lexer<'_> {
                     }
                 }
             }
+
+            out.push(token.clone());
+        }
+        self.output_tokens = out;
+    }
+    pub fn resolve_missed(&mut self) {
+        let mut funcs: Vec<&str> = Vec::<&str>::new();
+        let
+        for token in &self.output_tokens {
+
+        }
+        for token in &self.output_tokens {}
+        self.output_tokens = out;
+    }
+    pub fn resolve_array_types(&mut self) {
+        let mut out: Vec<Token> = Vec::new();
+        let mut index: usize = 0;
+        for token in &self.output_tokens {
+            index += 1;
             let mut pop = false;
             if let TokenType::Keyword(Keyword::ArrayType) = &token.typ {
                 if let Some(last) = out.last() {
@@ -433,8 +464,8 @@ impl<'a> Lexer<'_> {
                 if let TokenType::FuncIdentifier = last_sign_token_type {
                     //..
                 } else {
-                    test = self.recursive_type_parsing(last_type, index);
-                    index = test.1;
+                    test = self.recursive_type_parsing(last_type, index, ot.index);
+                    index = test.1 + 1;
                     out.push(Token::from_type(&TokenType::Type(test.0), ot.index));
                     continue;
                 }
@@ -447,7 +478,7 @@ impl<'a> Lexer<'_> {
         self.output_tokens = out;
     }
 
-    fn recursive_type_parsing(&self, original_type: &Type, mut index: usize) -> (Type, usize) {
+    fn recursive_type_parsing(&self, original_type: &Type, mut index: usize, line: usize) -> (Type, usize) {
         index += 1;
 
         let mut gathered: Vec<Type> = Vec::new();
@@ -466,7 +497,7 @@ impl<'a> Lexer<'_> {
             }
 
             if let TokenType::Keyword(Keyword::TypeArgumentStart) = typ {
-                test = self.recursive_type_parsing(last_type, index);
+                test = self.recursive_type_parsing(last_type, index, line);
                 index = test.1;
                 last_type = &test.0;
             }
@@ -483,7 +514,9 @@ impl<'a> Lexer<'_> {
 
             index += 1
         }
-
+        if gathered.contains(&Type::Void) {
+            wrn("Void type or no type specified", line, true)
+        }
         (
             Type::WithGenerics(Box::from(original_type.clone()), gathered),
             index,

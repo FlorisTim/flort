@@ -15,9 +15,6 @@ async fn main(){
         dbg!(&token.text);
         println!("-----")
     }
-
-
-
     loop {
         clear_background(BLACK);
 

@@ -1,7 +1,24 @@
 use std::collections::HashMap;
+use std::process::exit;
 use std::rc::Rc;
 use colored::Colorize;
 pub type Base = i64;
+
+pub fn wrn(err: &str, line: usize, ext: bool){
+    let fatal = "Warn".on_bright_yellow().black();
+    println!("{fatal} {} {}", "error at line", line/2);
+    println!("{}{}","      " , err);
+    if ext{
+        let mut input = String::new();
+        println!();
+        println!("Want to continue? (Y for yes, anything else for no)");
+        std::io::stdin().read_line(&mut input).unwrap_or_else(|_| {println!("I have no ears and I must listen.."); exit(65)});
+        let as_str = input.trim();
+        if !(as_str == "Y" || as_str == "y") {
+            exit(65)
+        }
+    }
+}
 
 impl Token{
     pub fn new(typ: &TokenType, text: &String, index: usize) -> Token{
