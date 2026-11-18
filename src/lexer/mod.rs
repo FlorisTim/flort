@@ -389,11 +389,21 @@ impl<'a> Lexer<'_> {
     }
     pub fn resolve_missed(&mut self) {
         let mut funcs: Vec<&str> = Vec::<&str>::new();
-        let
+        let mut vars: Vec<&str> = Vec::<&str>::new();
+        let mut last_token = None;
         for token in &self.output_tokens {
-
+            if let Some(&TokenType::Type(_)) = last_token{
+                if let Some()
+                funcs.push(&token.text);
+            }
+            last_token = Some(&token.typ)
         }
-        for token in &self.output_tokens {}
+
+        let mut out: Vec<Token> = Vec::new();
+        last_token = None;
+        for token in &self.output_tokens {
+            out.push(token.clone());
+        }
         self.output_tokens = out;
     }
     pub fn resolve_array_types(&mut self) {
