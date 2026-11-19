@@ -1,3 +1,3 @@
-class a;
-
-a<a<int>,a>[][][] b = 5;
+private <T> int genericMethod(T a){
+    T[] a = new T[5]
+}

@@ -1,12 +1,23 @@
 use crate::common::Type::Custom;
 use crate::common::*;
 use colored::Colorize;
-use macroquad::math::Vec2;
-use macroquad::prelude::scene::{add_node, clear};
-use std::ops::Deref;
 use std::process::exit;
-use crate::common;
 
+//This lexer does ALOT of guesswork so the parsing goes easier
+//i dont care about standards this is a hobby project.
+
+
+//todo fix this mess of a lexer (not until january though.)
+
+/// ## WHEN IMPROVING
+///
+/// the main loop is fine, the order of disambiguation is messed up.
+/// it should be:
+/// - main
+/// - define custom types (words after `class` or `struct`)
+/// - turn type arguments given into one keyword <--- (SKIP THIS actually, leave that to parsing.)
+/// - turn array types into one keyword
+/// - define variables & functions, maybe based on anything after a type and/or a closing type arg symbol (like in `HashMap<a,b> Something()`)
 pub struct Lexer<'a> {
     pub(crate) config: &'a CompilerConfig,
     pub(crate) output_tokens: Vec<Token>,
@@ -153,6 +164,8 @@ impl<'a> Lexer<'_> {
         }
     }
     pub fn get_tokens(&mut self, input: &str) {
+        println!("{}", input);
+
         let mut index: usize = 3;
         let mut reading_mode: ReadMode = ReadMode::Normal;
         let mut current_string: String = String::new();
@@ -288,12 +301,12 @@ impl<'a> Lexer<'_> {
             index,
         ));
         self.resolve_ambiguous();
-        //self.debug();
+        // //self.debug();
         self.resolve_type_args();
         self.resolve_array_types();
         self.resolve_missed();
+        self.resolve_array_types();
     }
-
 
 
     pub fn resolve_ambiguous(&mut self) {
@@ -350,6 +363,11 @@ impl<'a> Lexer<'_> {
                         out.push(token.clone().with_type(TokenType::Identifier));
                         continue;
                     }
+                    if let &TokenType::Keyword(Keyword::FieldAccess) = &last.typ {
+                        variables.push(&token.text);
+                        out.push(token.clone().with_type(TokenType::Identifier));
+                        continue;
+                    }
                 }
                 if variables.contains(&&token.text) {
                     out.push(token.clone().with_type(TokenType::Identifier));
@@ -382,26 +400,85 @@ impl<'a> Lexer<'_> {
                     }
                 }
             }
-
             out.push(token.clone());
         }
         self.output_tokens = out;
     }
     pub fn resolve_missed(&mut self) {
         let mut funcs: Vec<&str> = Vec::<&str>::new();
-        let mut vars: Vec<&str> = Vec::<&str>::new();
         let mut last_token = None;
+        let mut last_str: &str = "";
         for token in &self.output_tokens {
-            if let Some(&TokenType::Type(_)) = last_token{
-                if let Some()
-                funcs.push(&token.text);
+            if let Some(&TokenType::Identifier) = last_token {
+                if let TokenType::Keyword(Keyword::ArgumentStart) = token.typ {
+                    funcs.push(last_str);
+                }
             }
+            last_str = &token.text;
             last_token = Some(&token.typ)
         }
+        let mut generics: Vec<&str> = Vec::<&str>::new();
+        let mut vars: Vec<&str> = Vec::<&str>::new();
 
         let mut out: Vec<Token> = Vec::new();
         last_token = None;
+        let mut in_type_arg = false;
+
+        let mut index: usize = 0;
+
         for token in &self.output_tokens {
+            index +=1;
+            let last_token = out.last();
+            if let Some(last_token) = last_token {
+                println!("{last_token:?}");
+                if let TokenType::Keyword(Keyword::TypeArgumentStart) = last_token.typ {
+                    in_type_arg = true;
+                }
+                if let TokenType::Keyword(Keyword::TypeArgumentEnd) = last_token.typ {
+                    in_type_arg = false;
+                }
+                if let TokenType::Unknown = token.typ{
+                    if let TokenType::Type(_) = last_token.typ {
+                        if let Some(t) = self.output_tokens.get(index) {
+                            if let TokenType::Keyword(Keyword::ArgumentStart) = t.typ {
+                                funcs.push(&token.text);
+                                out.push(token.clone().with_type(TokenType::FuncIdentifier));
+                                continue;
+                            }
+                        }
+                        vars.push(&token.text);
+                        out.push(token.clone().with_type(TokenType::Identifier));
+                        continue;
+                    }
+                }
+            }
+            if let TokenType::Unknown = token.typ {
+                if vars.contains(&&*token.text) {
+                    out.push(token.clone().with_type(TokenType::Identifier));
+                    continue;
+                }
+                if in_type_arg {
+                    generics.push(&token.text);
+                    out.push(token.clone().with_type(TokenType::Type(Type::Generic)));
+                    continue;
+                }
+            }
+            if generics.contains(&&*token.text) {
+                out.push(token.clone().with_type(TokenType::Type(Type::Generic)));
+                continue;
+            }
+            if funcs.contains(&&*token.text) {
+                out.push(token.clone().with_type(TokenType::FuncIdentifier));
+                continue;
+            }
+            if let TokenType::Ambiguous(ref a, ref b) = token.typ {
+                if let &TokenType::Multiple(_) = &**b {
+                    out.push(token.clone().with_type((**a).clone()));
+                } else {
+                    out.push(token.clone().with_type((**b).clone()));
+                }
+                continue;
+            }
             out.push(token.clone());
         }
         self.output_tokens = out;
