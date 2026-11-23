@@ -1,0 +1,5 @@
+<screen attributes-from="attributes/basic.xml">
+    <sub pseudo="main-title-screen">
+        <button id="start"/>
+    </sub>
+</screen>

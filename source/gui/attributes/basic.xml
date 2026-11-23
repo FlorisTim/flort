@@ -1,0 +1,7 @@
+<attributes>
+    <main-title-screen>
+        display: flex;
+        align-horizontal: center;
+        align-vertical: center
+    </main-title-screen>
+</attributes>
