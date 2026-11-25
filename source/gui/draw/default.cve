@@ -1,0 +1,33 @@
+add_save(&me::width, me::border_thickness)
+add_save(&me::height)
+
+from_here()
+
+sub(me::width, me::border_radius) -> (w)
+sub(me::height, me::border_radius) -> (h)
+
+rectangle(me::x, me::y, w, me::height, &me::border_color)
+rectangle(me::x, me::y, me::width, h)
+
+half(w) -> (hw)
+half(h) -> (hh)
+
+sub(me::x, hw) -> (lx)
+add(me::x, hw) -> (rx)
+
+sub(me::y, hh) -> (ly)
+add(me::y, hh) -> (ry)
+
+half(me::border_radius) -> (me::border_radius)
+
+2circle(lx, ly, ry, me::border_radius, &me::border_color)
+2circle(rx)
+
+color_copy(&me::border_color, &me::color)
+
+double_save(&me::border_radius)
+
+sub_save(&me::width, me::border_thickness)
+sub_save(&me::height)
+
+start_over()
